@@ -2,113 +2,65 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 const ThemeContext = createContext();
 
-export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useTheme must be used within ThemeProvider");
-  }
-  return context;
-};
+export const useTheme = () => useContext(ThemeContext);
 
-export const THEME_PRESETS = {
-  default: {
-    name: "Default",
-    bgClass: "bg-[#050505]",
-    bgStyle: { background: "#050505" },
-    bgImage: null,
-    description: "Classic dark theme",
-  },
-  gradient_purple: {
-    name: "Purple Gradient",
-    bgClass: "bg-gradient-to-br from-[#7000FF] to-[#050505]",
-    bgStyle: {
-      background: "linear-gradient(to bottom right, #7000FF, #050505)",
-    },
-    bgImage: null,
-    description: "Purple to dark gradient",
-  },
-  gradient_blue: {
-    name: "Blue Gradient",
-    bgClass: "bg-gradient-to-br from-[#0066FF] to-[#050505]",
-    bgStyle: {
-      background: "linear-gradient(to bottom right, #0066FF, #050505)",
-    },
-    bgImage: null,
-    description: "Blue to dark gradient",
-  },
-  gradient_teal: {
-    name: "Teal Gradient",
-    bgClass: "bg-gradient-to-br from-[#00D9FF] to-[#050505]",
-    bgStyle: {
-      background: "linear-gradient(to bottom right, #00D9FF, #050505)",
-    },
-    bgImage: null,
-    description: "Teal to dark gradient",
-  },
-  dark_forest: {
-    name: "Forest",
-    bgClass: "bg-[#0a1f12]",
-    bgStyle: { background: "#0a1f12" },
-    bgImage: null,
-    description: "Deep forest green",
-  },
-  dark_midnight: {
+// Added missing export
+export const THEME_PRESETS = [
+  { id: "default", name: "Default Dark", style: { background: "#050505" } },
+  {
+    id: "gradient-1",
     name: "Midnight",
-    bgClass: "bg-[#0a0e27]",
-    bgStyle: { background: "#0a0e27" },
-    bgImage: null,
-    description: "Deep midnight blue",
+    style: {
+      background: "linear-gradient(to bottom right, #0f2027, #203a43, #2c5364)",
+    },
   },
-  dark_maroon: {
-    name: "Maroon",
-    bgClass: "bg-[#2d0a0a]",
-    bgStyle: { background: "#2d0a0a" },
-    bgImage: null,
-    description: "Deep maroon red",
+  {
+    id: "gradient-2",
+    name: "Sunset",
+    style: { background: "linear-gradient(to bottom right, #373B44, #4286f4)" },
   },
-  particles: {
-    name: "Particles",
-    bgClass: "bg-[#050505]",
-    bgStyle: { background: "#050505" },
-    bgImage: "particles",
-    description: "Animated particle effect",
+  {
+    id: "gradient-3",
+    name: "Forest",
+    style: { background: "linear-gradient(to bottom right, #000000, #0f9b0f)" },
   },
-};
+  {
+    id: "gradient-4",
+    name: "Royal",
+    style: { background: "linear-gradient(to bottom right, #141E30, #243B55)" },
+  },
+  { id: "solid-1", name: "Pitch Black", style: { background: "#000000" } },
+  { id: "solid-2", name: "Dark Gray", style: { background: "#1a1a1a" } },
+];
 
 export const ThemeProvider = ({ children }) => {
-  const [currentTheme, setCurrentTheme] = useState("default");
-  const [customBgColor, setCustomBgColor] = useState("#050505");
+  const [theme, setTheme] = useState(
+    localStorage.getItem("app_theme") || "dark"
+  );
+  const [currentThemeData, setCurrentThemeData] = useState({});
 
   useEffect(() => {
-    const saved = localStorage.getItem("chat_theme");
-    if (saved && THEME_PRESETS[saved]) {
-      setCurrentTheme(saved);
-    }
-  }, []);
+    const root = window.document.documentElement;
+    root.classList.remove("light", "dark");
+    root.classList.add(theme);
+    localStorage.setItem("app_theme", theme);
+  }, [theme]);
 
-  const changeTheme = (themeId) => {
-    if (THEME_PRESETS[themeId]) {
-      setCurrentTheme(themeId);
-      localStorage.setItem("chat_theme", themeId);
-    }
+  const toggleTheme = (newTheme) => {
+    setTheme(newTheme);
   };
 
-  const updateCustomBgColor = (color) => {
-    setCustomBgColor(color);
-    localStorage.setItem("custom_bg_color", color);
+  const setChatBackground = (style) => {
+    setCurrentThemeData({ bgStyle: style });
   };
-
-  const currentThemeData = THEME_PRESETS[currentTheme];
 
   return (
     <ThemeContext.Provider
       value={{
-        currentTheme,
-        changeTheme,
+        theme,
+        setTheme: toggleTheme,
         currentThemeData,
-        customBgColor,
-        updateCustomBgColor,
-        availableThemes: THEME_PRESETS,
+        setChatBackground,
       }}
     >
       {children}

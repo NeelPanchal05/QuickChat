@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useSound } from "@/contexts/SoundContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import axios from "axios";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,7 @@ import PrivacyManager from "@/components/PrivacyManager";
 import MediaUploader from "@/components/MediaUploader";
 import GifPicker from "@/components/GifPicker";
 import PollCreator from "@/components/PollCreator";
+import BlockedUsersManager from "@/components/BlockedUsersManager";
 import MessageReadStatus from "@/components/MessageReadStatus";
 import Profile from "@/pages/Profile";
 import TermsAndConditions from "@/pages/TermsAndConditions";
@@ -60,6 +63,8 @@ import {
 export default function Chat() {
   const { user, token, socket, logout, API } = useAuth();
   const { currentThemeData } = useTheme();
+  const { playNotificationSound } = useSound();
+  const { t } = useLanguage();
 
   // Data States
   const [conversations, setConversations] = useState([]);
@@ -86,6 +91,7 @@ export default function Chat() {
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [showPollCreator, setShowPollCreator] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showBlockedUsers, setShowBlockedUsers] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
 
   // Call States
@@ -187,10 +193,9 @@ export default function Chat() {
   };
 
   const deleteConversation = async (e, convId) => {
-    e.stopPropagation(); // Prevent opening the chat
+    e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this conversation?"))
       return;
-
     try {
       await axios.delete(`${API}/conversations/${convId}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -198,9 +203,8 @@ export default function Chat() {
       setConversations((prev) =>
         prev.filter((c) => c.conversation_id !== convId)
       );
-      if (selectedConversation?.conversation_id === convId) {
+      if (selectedConversation?.conversation_id === convId)
         setSelectedConversation(null);
-      }
       toast.success("Conversation deleted");
     } catch (error) {
       toast.error("Failed to delete conversation");
@@ -209,14 +213,11 @@ export default function Chat() {
 
   const clearChat = async () => {
     if (!selectedConversation) return;
-    if (!window.confirm("Clear all messages in this chat?")) return;
-
+    if (!window.confirm("Clear all messages?")) return;
     try {
       await axios.delete(
         `${API}/conversations/${selectedConversation.conversation_id}/messages`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       setMessages([]);
       toast.success("Chat cleared");
@@ -228,16 +229,19 @@ export default function Chat() {
   // --- Socket Listeners ---
   useEffect(() => {
     if (!socket) return;
-
     const handleNewMessage = (msg) => {
       const currentConv = selectedConversationRef.current;
+
+      // Play sound for incoming messages (not own)
+      if (msg.sender_id !== user.user_id) {
+        playNotificationSound();
+      }
 
       if (currentConv && msg.conversation_id === currentConv.conversation_id) {
         setMessages((prev) => {
           if (prev.some((m) => m.message_id === msg.message_id)) return prev;
           return [...prev, msg];
         });
-
         socket.emit("message_read", {
           message_id: msg.message_id,
           conversation_id: msg.conversation_id,
@@ -245,7 +249,6 @@ export default function Chat() {
       }
       fetchConversations();
     };
-
     const handleUserTyping = (data) => {
       const currentConv = selectedConversationRef.current;
       if (currentConv && data.conversation_id === currentConv.conversation_id) {
@@ -254,12 +257,10 @@ export default function Chat() {
         typingTimeoutRef.current = setTimeout(() => setTyping(null), 3000);
       }
     };
-
     const handleIncomingCall = (data) => {
       setCallData({ ...data, incoming: true });
       setShowCall(true);
     };
-
     const handleOnline = (data) =>
       setOnlineUsers((p) => new Set([...p, data.user_id]));
     const handleOffline = (data) =>
@@ -268,30 +269,24 @@ export default function Chat() {
         newSet.delete(data.user_id);
         return newSet;
       });
-    const handleError = (data) => toast.error(data.message);
 
     socket.on("new_message", handleNewMessage);
     socket.on("user_typing", handleUserTyping);
     socket.on("user_online", handleOnline);
     socket.on("user_offline", handleOffline);
     socket.on("incoming_call", handleIncomingCall);
-    socket.on("error", handleError);
-
     return () => {
       socket.off("new_message", handleNewMessage);
       socket.off("user_typing", handleUserTyping);
       socket.off("user_online", handleOnline);
       socket.off("user_offline", handleOffline);
       socket.off("incoming_call", handleIncomingCall);
-      socket.off("error", handleError);
     };
-  }, [socket, fetchConversations]);
+  }, [socket, fetchConversations, playNotificationSound, user.user_id]);
 
-  // --- Conversation Logic ---
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
-
   useEffect(() => {
     if (selectedConversation && socket) {
       fetchMessages(selectedConversation.conversation_id);
@@ -300,23 +295,19 @@ export default function Chat() {
       });
     }
   }, [selectedConversation, fetchMessages, socket]);
-
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // --- Send Message ---
   const sendMessage = async () => {
     if (
       (!messageInput.trim() && attachedFiles.length === 0) ||
       !selectedConversation
     )
       return;
-
     if (messageInput.trim()) {
       const content = messageInput;
       const tempId = `temp_${Date.now()}`;
-
       const optimisticMsg = {
         message_id: tempId,
         conversation_id: selectedConversation.conversation_id,
@@ -326,44 +317,34 @@ export default function Chat() {
         timestamp: new Date().toISOString(),
         read_by: [user.user_id],
       };
-
       setMessages((prev) => [...prev, optimisticMsg]);
-
       setConversations((prev) => {
-        const updated = prev.map((c) => {
-          if (c.conversation_id === selectedConversation.conversation_id) {
-            return {
-              ...c,
-              last_message: optimisticMsg,
-              updated_at: optimisticMsg.timestamp,
-            };
-          }
-          return c;
-        });
+        const updated = prev.map((c) =>
+          c.conversation_id === selectedConversation.conversation_id
+            ? {
+                ...c,
+                last_message: optimisticMsg,
+                updated_at: optimisticMsg.timestamp,
+              }
+            : c
+        );
         return updated.sort(
           (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
         );
       });
-
       socket?.emit("send_message", {
         conversation_id: selectedConversation.conversation_id,
         content: content,
         message_type: "text",
       });
     }
-
     for (const file of attachedFiles) {
       try {
         await axios.post(
           `${API}/conversations/${selectedConversation.conversation_id}/messages`,
-          {
-            content: file.data,
-            message_type: file.type,
-            file_name: file.name,
-          },
+          { content: file.data, message_type: file.type, file_name: file.name },
           { headers: { Authorization: `Bearer ${token}` } }
         );
-
         socket?.emit("send_message", {
           conversation_id: selectedConversation.conversation_id,
           content: file.data,
@@ -375,7 +356,6 @@ export default function Chat() {
         toast.error(`Failed to send ${file.name}`);
       }
     }
-
     setMessageInput("");
     setAttachedFiles([]);
     setShowMediaUploader(false);
@@ -384,53 +364,49 @@ export default function Chat() {
 
   const sendLocation = () => {
     if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported by your browser");
+      toast.error("Geolocation not supported");
       return;
     }
-    toast.info("Getting location...");
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const locationLink = `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
+      (pos) =>
         socket?.emit("send_message", {
           conversation_id: selectedConversation.conversation_id,
-          content: locationLink,
+          content: `https://www.google.com/maps?q=$${pos.coords.latitude},${pos.coords.longitude}`,
           message_type: "location",
-        });
-      },
-      () => toast.error("Unable to retrieve your location")
+        }),
+      () => toast.error("Unable to retrieve location")
     );
   };
 
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   const isUserOnline = (userId) => onlineUsers.has(userId);
-
   const startCall = (callType) => {
-    if (!selectedConversation) return;
-    setCallData({
-      callType,
-      otherUser: selectedConversation.other_user,
-      incoming: false,
-    });
-    setShowCall(true);
+    if (selectedConversation) {
+      setCallData({
+        callType,
+        otherUser: selectedConversation.other_user,
+        incoming: false,
+      });
+      setShowCall(true);
+    }
   };
 
-  // --- Render ---
   return (
-    <div className="h-screen flex flex-col md:flex-row bg-[#050505] font-sans overflow-hidden">
+    <div className="h-screen flex flex-col md:flex-row bg-background font-sans overflow-hidden">
       {/* Sidebar */}
       <div
         className={`${
           selectedConversation ? "hidden md:flex" : "flex"
-        } w-full md:w-80 backdrop-blur-xl bg-black/70 border-r border-white/5 flex-col h-full`}
+        } w-full md:w-80 backdrop-blur-xl bg-card/80 border-r border-border flex-col h-full`}
       >
-        <div className="p-4 border-b border-white/5">
+        <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#7000FF] to-blue-600 flex items-center justify-center">
-                <MessageCircle className="text-white w-5 h-5" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center">
+                <MessageCircle className="text-primary-foreground w-5 h-5" />
               </div>
-              <h1 className="text-xl font-bold text-white hidden sm:block">
+              <h1 className="text-xl font-bold text-foreground hidden sm:block">
                 QuickChat
               </h1>
             </div>
@@ -439,67 +415,69 @@ export default function Chat() {
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowInvite(true)}
-                className="text-[#A1A1AA] hover:text-white"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <UserPlus size={20} />
               </Button>
+              {/* SETTINGS MENU WITH NEW HANDLERS */}
               <SettingsMenu
                 onProfile={() => setShowProfile(true)}
                 onLogout={logout}
                 onTerms={() => setShowTerms(true)}
+                onBackgrounds={() => setShowBackgroundSelector(true)}
+                onBlockedUsers={() => setShowBlockedUsers(true)}
+                onPrivacy={() => setShowPrivacy(true)}
               />
             </div>
           </div>
-
           <div className="relative z-20">
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
               size={16}
             />
             <Input
-              placeholder="Search users..."
+              placeholder={t("search_placeholder")}
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 searchUsers(e.target.value);
               }}
-              className="pl-9 bg-white/5 border-white/10 text-white rounded-full h-9"
+              className="pl-9 bg-muted border-border text-foreground rounded-full h-9"
             />
           </div>
-
-          {/* Search Results */}
           {searchResults.length > 0 && (
-            <div className="mt-2 bg-[#111] border border-white/10 rounded-lg max-h-48 overflow-y-auto">
+            <div className="mt-2 bg-popover border border-border rounded-lg max-h-48 overflow-y-auto">
               {searchResults.map((u) => (
                 <div
                   key={u.user_id}
                   onClick={() => createOrOpenConversation(u.user_id)}
-                  className="p-3 hover:bg-white/5 cursor-pointer flex items-center gap-3"
+                  className="p-3 hover:bg-accent cursor-pointer flex items-center gap-3"
                 >
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={u.profile_photo} />
                     <AvatarFallback>{u.username[0]}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-sm font-medium text-white">
+                    <p className="text-sm font-medium text-foreground">
                       {u.real_name}
                     </p>
-                    <p className="text-xs text-[#666]">@{u.username}</p>
+                    <p className="text-xs text-muted-foreground">
+                      @{u.username}
+                    </p>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
-
         <div className="flex-1 overflow-y-auto">
           {conversations.map((c) => (
             <div
               key={c.conversation_id}
               onClick={() => setSelectedConversation(c)}
-              className={`group p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors relative ${
+              className={`group p-4 border-b border-border cursor-pointer hover:bg-accent transition-colors relative ${
                 selectedConversation?.conversation_id === c.conversation_id
-                  ? "bg-white/10"
+                  ? "bg-accent/80"
                   : ""
               }`}
             >
@@ -510,31 +488,27 @@ export default function Chat() {
                     <AvatarFallback>{c.other_user?.username[0]}</AvatarFallback>
                   </Avatar>
                   {isUserOnline(c.other_user?.user_id) && (
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-black"></div>
+                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between">
-                    <span className="font-medium text-white truncate">
+                    <span className="font-medium text-foreground truncate">
                       {c.other_user?.real_name}
                     </span>
-                    {c.is_pinned && (
-                      <Pin size={12} className="text-[#7000FF]" />
-                    )}
+                    {c.is_pinned && <Pin size={12} className="text-primary" />}
                   </div>
-                  <p className="text-xs text-[#888] truncate">
+                  <p className="text-xs text-muted-foreground truncate">
                     {c.last_message?.content
-                      ? c.last_message.content.substring(0, 30) +
-                        (c.last_message.content.length > 30 ? "..." : "")
-                      : "Start chatting..."}
+                      ? c.last_message.content.substring(0, 30) + "..."
+                      : t("start_chatting")}
                   </p>
                 </div>
-                {/* Delete Button on Sidebar */}
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={(e) => deleteConversation(e, c.conversation_id)}
-                  className="opacity-0 group-hover:opacity-100 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-all h-8 w-8"
+                  className="opacity-0 group-hover:opacity-100 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all h-8 w-8"
                 >
                   <Trash2 size={16} />
                 </Button>
@@ -550,15 +524,18 @@ export default function Chat() {
           className={`${
             !selectedConversation ? "hidden md:flex" : "flex"
           } flex-1 flex-col h-full relative`}
-          style={currentThemeData?.bgStyle}
+          style={
+            currentThemeData?.bgStyle || {
+              backgroundColor: "var(--background)",
+            }
+          }
         >
-          {/* Header */}
-          <div className="p-3 md:p-4 backdrop-blur-md bg-black/60 border-b border-white/10 flex justify-between items-center z-10">
+          <div className="p-3 md:p-4 backdrop-blur-md bg-card/80 border-b border-border flex justify-between items-center z-10">
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="icon"
-                className="md:hidden text-white"
+                className="md:hidden text-foreground"
                 onClick={() => setSelectedConversation(null)}
               >
                 <X />
@@ -572,21 +549,14 @@ export default function Chat() {
                 </AvatarFallback>
               </Avatar>
               <div>
-                <h3 className="font-bold text-white text-sm">
+                <h3 className="font-bold text-foreground text-sm">
                   {selectedConversation.other_user?.real_name}
                 </h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">
-                    {isUserOnline(selectedConversation.other_user?.user_id)
-                      ? "Online"
-                      : "Offline"}
-                  </span>
-                  {typing === selectedConversation.other_user?.user_id && (
-                    <span className="text-xs text-[#7000FF] animate-pulse">
-                      typing...
-                    </span>
-                  )}
-                </div>
+                <span className="text-xs text-muted-foreground">
+                  {isUserOnline(selectedConversation.other_user?.user_id)
+                    ? t("online")
+                    : t("offline")}
+                </span>
               </div>
             </div>
             <div className="flex gap-1 md:gap-2 items-center">
@@ -594,7 +564,7 @@ export default function Chat() {
                 variant="ghost"
                 size="icon"
                 onClick={() => startCall("audio")}
-                className="text-gray-400 hover:text-white"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <Phone size={18} />
               </Button>
@@ -602,61 +572,46 @@ export default function Chat() {
                 variant="ghost"
                 size="icon"
                 onClick={() => startCall("video")}
-                className="text-gray-400 hover:text-white"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <Video size={18} />
               </Button>
-
-              {/* Date Search Trigger */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-gray-400 hover:text-white"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     <Calendar size={18} />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80 bg-black border border-white/10 p-4">
-                  <h4 className="text-white font-medium mb-2">
+                <PopoverContent className="w-80 bg-popover border border-border p-4">
+                  <h4 className="text-foreground font-medium mb-2">
                     Search by Date
                   </h4>
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs text-gray-400">
-                          Start Date
-                        </label>
-                        <Input
-                          type="date"
-                          className="bg-white/10 text-white"
-                          onChange={(e) =>
-                            setDateSearch({
-                              ...dateSearch,
-                              start: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400">
-                          End Date
-                        </label>
-                        <Input
-                          type="date"
-                          className="bg-white/10 text-white"
-                          onChange={(e) =>
-                            setDateSearch({
-                              ...dateSearch,
-                              end: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
+                      <Input
+                        type="date"
+                        className="bg-muted text-foreground"
+                        onChange={(e) =>
+                          setDateSearch({
+                            ...dateSearch,
+                            start: e.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        type="date"
+                        className="bg-muted text-foreground"
+                        onChange={(e) =>
+                          setDateSearch({ ...dateSearch, end: e.target.value })
+                        }
+                      />
                     </div>
                     <Button
-                      className="w-full bg-[#7000FF]"
+                      className="w-full"
                       onClick={() =>
                         fetchMessages(
                           selectedConversation.conversation_id,
@@ -664,49 +619,44 @@ export default function Chat() {
                         )
                       }
                     >
-                      Search Messages
+                      Search
                     </Button>
                   </div>
                 </PopoverContent>
               </Popover>
-
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowPrivacy(true)}
-                className="text-gray-400 hover:text-white"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <Shield size={18} />
               </Button>
-
-              {/* Chat Options Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-gray-400 hover:text-white"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     <MoreVertical size={18} />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-48 bg-[#111] border-white/10 text-white"
+                  className="w-48 bg-popover border-border text-foreground"
                 >
                   <DropdownMenuItem
                     onClick={clearChat}
-                    className="text-red-400 focus:text-red-400 focus:bg-red-500/10 cursor-pointer"
+                    className="text-destructive cursor-pointer"
                   >
                     <Eraser className="mr-2 h-4 w-4" />
-                    <span>Clear Chat</span>
+                    <span>{t("clear_chat")}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
-
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
             {messages.map((m) => {
               const isOwn = m.sender_id === user.user_id;
@@ -718,15 +668,14 @@ export default function Chat() {
                   <div
                     className={`max-w-[75%] p-3 rounded-2xl ${
                       isOwn
-                        ? "bg-[#7000FF] text-white rounded-tr-none"
-                        : "bg-white/10 text-white rounded-tl-none backdrop-blur-sm"
+                        ? "bg-primary text-primary-foreground rounded-tr-none"
+                        : "bg-muted text-foreground rounded-tl-none backdrop-blur-sm"
                     }`}
                   >
-                    {/* Content Rendering based on Type */}
                     {m.message_type === "text" && <p>{m.content}</p>}
                     {m.message_type === "poll" && (
                       <div className="italic text-sm">
-                        Poll: {JSON.parse(m.content).question}
+                        {t("poll")}: {JSON.parse(m.content).question}
                       </div>
                     )}
                     {m.message_type === "location" && (
@@ -734,9 +683,9 @@ export default function Chat() {
                         href={m.content}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 underline text-white"
+                        className="flex items-center gap-2 underline text-inherit"
                       >
-                        <MapPin size={16} /> View Location
+                        <MapPin size={16} /> {t("view_location")}
                       </a>
                     )}
                     {m.message_type === "image" && (
@@ -766,11 +715,10 @@ export default function Chat() {
                         <div className="flex items-center gap-2">
                           <Paperclip size={16} />
                           <span className="text-sm underline">
-                            {m.file_name || "Attached File"}
+                            {m.file_name || t("attached_file")}
                           </span>
                         </div>
                       )}
-
                     <div className="flex justify-between items-center mt-1 gap-2">
                       <span className="text-[10px] opacity-70">
                         {new Date(m.timestamp).toLocaleTimeString([], {
@@ -790,9 +738,7 @@ export default function Chat() {
             })}
             <div ref={messagesEndRef} />
           </div>
-
-          {/* Input Area */}
-          <div className="p-3 backdrop-blur-md bg-black/60 border-t border-white/10">
+          <div className="p-3 backdrop-blur-md bg-card/80 border-t border-border">
             {showMediaUploader && (
               <MediaUploader
                 onUpload={(f) => setAttachedFiles((p) => [...p, f])}
@@ -803,7 +749,7 @@ export default function Chat() {
                 {attachedFiles.map((f) => (
                   <div
                     key={f.id}
-                    className="bg-white/10 px-3 py-1 rounded-full flex items-center gap-2 text-white text-xs"
+                    className="bg-muted px-3 py-1 rounded-full flex items-center gap-2 text-foreground text-xs"
                   >
                     {f.name}{" "}
                     <X
@@ -822,19 +768,18 @@ export default function Chat() {
             {showEmojiPicker && (
               <div className="absolute bottom-20">
                 <EmojiPicker
-                  theme="dark"
+                  theme={currentThemeData.bgStyle ? "dark" : "auto"}
                   onEmojiClick={(e) => setMessageInput((p) => p + e.emoji)}
                 />
               </div>
             )}
-
             <div className="flex items-center gap-2">
               <div className="flex gap-1">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowMediaUploader(!showMediaUploader)}
-                  className="text-gray-400 hover:text-[#7000FF]"
+                  className="text-muted-foreground hover:text-primary"
                 >
                   <Paperclip size={20} />
                 </Button>
@@ -842,7 +787,7 @@ export default function Chat() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="text-gray-400 hover:text-[#7000FF]"
+                  className="text-muted-foreground hover:text-primary"
                 >
                   <Smile size={20} />
                 </Button>
@@ -850,7 +795,7 @@ export default function Chat() {
                   variant="ghost"
                   size="icon"
                   onClick={sendLocation}
-                  className="text-gray-400 hover:text-[#7000FF]"
+                  className="text-muted-foreground hover:text-primary"
                 >
                   <MapPin size={20} />
                 </Button>
@@ -858,7 +803,7 @@ export default function Chat() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowPollCreator(true)}
-                  className="text-gray-400 hover:text-[#7000FF]"
+                  className="text-muted-foreground hover:text-primary"
                 >
                   <BarChart3 size={20} />
                 </Button>
@@ -866,7 +811,7 @@ export default function Chat() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowBackgroundSelector(true)}
-                  className="text-gray-400 hover:text-[#7000FF]"
+                  className="text-muted-foreground hover:text-primary"
                 >
                   <Settings size={20} />
                 </Button>
@@ -880,25 +825,25 @@ export default function Chat() {
                   });
                 }}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                placeholder="Type a message..."
-                className="flex-1 bg-white/5 border-white/10 text-white rounded-full"
+                placeholder={t("type_message")}
+                className="flex-1 bg-muted border-border text-foreground rounded-full"
               />
               <Button
                 onClick={sendMessage}
-                className="bg-[#7000FF] hover:bg-[#5a00cc] rounded-full w-10 h-10 p-0 flex items-center justify-center"
+                className="bg-primary hover:bg-primary/90 rounded-full w-10 h-10 p-0 flex items-center justify-center"
               >
-                <Send size={18} className="ml-1" />
+                <Send size={18} className="ml-1 text-primary-foreground" />
               </Button>
             </div>
           </div>
         </div>
       ) : (
-        <div className="hidden md:flex flex-1 items-center justify-center bg-[#0a0a0a]">
-          <div className="text-center text-gray-500">
-            <div className="w-20 h-20 bg-[#111] rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <MessageCircle size={40} className="text-[#7000FF]" />
+        <div className="hidden md:flex flex-1 items-center justify-center bg-background">
+          <div className="text-center text-muted-foreground">
+            <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <MessageCircle size={40} className="text-primary" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">
+            <h2 className="text-2xl font-bold text-foreground mb-2">
               Welcome to QuickChat
             </h2>
             <p>Select a conversation to start chatting securely.</p>
@@ -919,12 +864,12 @@ export default function Chat() {
         />
       )}
       <Dialog open={showProfile} onOpenChange={setShowProfile}>
-        <DialogContent className="max-w-xl bg-[#0a0a0a] border-white/10">
+        <DialogContent className="max-w-xl bg-card border-border">
           <Profile user={user} onBack={() => setShowProfile(false)} />
         </DialogContent>
       </Dialog>
       <Dialog open={showTerms} onOpenChange={setShowTerms}>
-        <DialogContent className="max-w-3xl bg-[#0a0a0a] border-white/10">
+        <DialogContent className="max-w-3xl bg-card border-border">
           <TermsAndConditions onBack={() => setShowTerms(false)} />
         </DialogContent>
       </Dialog>
@@ -932,22 +877,22 @@ export default function Chat() {
         open={showBackgroundSelector}
         onOpenChange={setShowBackgroundSelector}
       >
-        <DialogContent className="max-w-xl bg-[#0a0a0a] border-white/10">
+        <DialogContent className="max-w-xl bg-card border-border">
           <ChatBackgroundSelector />
         </DialogContent>
       </Dialog>
       <Dialog open={showCallHistory} onOpenChange={setShowCallHistory}>
-        <DialogContent className="max-w-xl bg-[#0a0a0a] border-white/10">
+        <DialogContent className="max-w-xl bg-card border-border">
           <CallHistory onClose={() => setShowCallHistory(false)} />
         </DialogContent>
       </Dialog>
       <Dialog open={showPrivacy} onOpenChange={setShowPrivacy}>
-        <DialogContent className="max-w-xl bg-[#0a0a0a] border-white/10">
+        <DialogContent className="max-w-xl bg-card border-border">
           <PrivacyManager onClose={() => setShowPrivacy(false)} />
         </DialogContent>
       </Dialog>
       <Dialog open={showGifPicker} onOpenChange={setShowGifPicker}>
-        <DialogContent className="max-w-xl bg-[#0a0a0a] border-white/10">
+        <DialogContent className="max-w-xl bg-card border-border">
           <GifPicker
             onSelect={(url) => {
               setMessageInput(url);
@@ -958,7 +903,7 @@ export default function Chat() {
         </DialogContent>
       </Dialog>
       <Dialog open={showPollCreator} onOpenChange={setShowPollCreator}>
-        <DialogContent className="max-w-xl bg-[#0a0a0a] border-white/10">
+        <DialogContent className="max-w-xl bg-card border-border">
           <PollCreator
             onClose={() => setShowPollCreator(false)}
             onCreatePoll={async (poll) => {
@@ -984,12 +929,15 @@ export default function Chat() {
           />
         </DialogContent>
       </Dialog>
-
-      {/* Invite Modal */}
+      <Dialog open={showBlockedUsers} onOpenChange={setShowBlockedUsers}>
+        <DialogContent className="max-w-md bg-card border-border">
+          <BlockedUsersManager onClose={() => setShowBlockedUsers(false)} />
+        </DialogContent>
+      </Dialog>
       <Dialog open={showInvite} onOpenChange={setShowInvite}>
-        <DialogContent className="max-w-md bg-[#0a0a0a] border-white/10 text-white">
+        <DialogContent className="max-w-md bg-card border-border text-foreground">
           <DialogHeader>
-            <DialogTitle>Invite a Friend</DialogTitle>
+            <DialogTitle>{t("invite_friend")}</DialogTitle>
             <DialogDescription>
               Send an email invitation to join QuickChat.
             </DialogDescription>
@@ -998,10 +946,10 @@ export default function Chat() {
             placeholder="friend@email.com"
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
-            className="bg-white/10 border-white/10"
+            className="bg-muted border-border"
           />
-          <Button onClick={inviteFriend} className="bg-[#7000FF] w-full">
-            Send Invitation
+          <Button onClick={inviteFriend} className="bg-primary w-full">
+            {t("invite_friend")}
           </Button>
         </DialogContent>
       </Dialog>

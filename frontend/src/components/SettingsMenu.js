@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
+import React from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,6 +6,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Settings,
@@ -17,165 +17,154 @@ import {
   VolumeX,
   Shield,
   LogOut,
+  Image as ImageIcon,
+  UserX,
+  Lock,
 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useSound } from "@/contexts/SoundContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
-export default function SettingsMenu({ onProfile, onLogout, onTerms }) {
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
-  const [theme, setTheme] = useState("dark");
-  const [language, setLanguage] = useState("en");
-
-  const handleThemeChange = (newTheme) => {
-    setTheme(newTheme);
-    localStorage.setItem("app_theme", newTheme);
-  };
-
-  const handleLanguageChange = (lang) => {
-    setLanguage(lang);
-    localStorage.setItem("app_language", lang);
-  };
+export default function SettingsMenu({
+  onProfile,
+  onLogout,
+  onTerms,
+  onBackgrounds,
+  onBlockedUsers,
+  onPrivacy,
+}) {
+  const { theme, setTheme } = useTheme();
+  const { soundEnabled, setSoundEnabled } = useSound();
+  const { language, setLanguage, t } = useLanguage();
 
   return (
     <DropdownMenu>
-      <button className="p-2 hover:bg-white/10 rounded-lg transition-colors text-[#A1A1AA] hover:text-white">
-        <Settings size={20} />
-      </button>
+      <DropdownMenuTrigger asChild>
+        <button className="p-2 hover:bg-white/10 rounded-lg transition-colors text-[#A1A1AA] hover:text-white outline-none">
+          <Settings size={20} />
+        </button>
+      </DropdownMenuTrigger>
 
       <DropdownMenuContent
         align="end"
-        className="w-56 bg-black/90 border-white/10 text-white backdrop-blur-xl"
+        className="w-64 bg-[#0a0a0a] border border-white/10 text-white backdrop-blur-xl shadow-2xl"
       >
-        <DropdownMenuLabel className="text-[#A1A1AA]">
-          Settings
+        <DropdownMenuLabel className="text-[#A1A1AA] text-xs uppercase tracking-wider">
+          {t("settings")}
         </DropdownMenuLabel>
-        <DropdownMenuSeparator className="bg-white/5" />
+        <DropdownMenuSeparator className="bg-white/10" />
 
-        {/* Appearance Section */}
-        <div className="px-2 py-2">
-          <p className="text-xs font-semibold text-[#A1A1AA] px-2 mb-2">
-            Appearance
-          </p>
+        {/* Chat Settings */}
+        <div className="p-1">
+          <DropdownMenuItem
+            onClick={onBackgrounds}
+            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
+          >
+            <ImageIcon size={16} /> {t("chat_wallpapers")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onBlockedUsers}
+            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
+          >
+            <UserX size={16} /> {t("blocked_users")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onPrivacy}
+            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
+          >
+            <Lock size={16} /> {t("privacy")}
+          </DropdownMenuItem>
+        </div>
 
+        <DropdownMenuSeparator className="bg-white/10" />
+
+        {/* Appearance */}
+        <div className="p-1">
+          <DropdownMenuLabel className="text-[#666] text-[10px] uppercase pl-2">
+            {t("appearance")}
+          </DropdownMenuLabel>
           <DropdownMenuCheckboxItem
             checked={theme === "dark"}
-            onCheckedChange={() => handleThemeChange("dark")}
-            className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
+            onCheckedChange={() => setTheme("dark")}
+            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
           >
-            <Moon size={16} className="mr-2" />
-            Dark Theme
+            <Moon size={16} /> {t("dark_theme")}
           </DropdownMenuCheckboxItem>
-
           <DropdownMenuCheckboxItem
             checked={theme === "light"}
-            onCheckedChange={() => handleThemeChange("light")}
-            className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
+            onCheckedChange={() => setTheme("light")}
+            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
           >
-            <Sun size={16} className="mr-2" />
-            Light Theme
+            <Sun size={16} /> {t("light_theme")}
           </DropdownMenuCheckboxItem>
         </div>
 
-        <DropdownMenuSeparator className="bg-white/5" />
+        <DropdownMenuSeparator className="bg-white/10" />
 
-        {/* Sound Section */}
-        <div className="px-2 py-2">
-          <p className="text-xs font-semibold text-[#A1A1AA] px-2 mb-2">
-            Notifications
-          </p>
-
+        {/* Notifications */}
+        <div className="p-1">
+          <DropdownMenuLabel className="text-[#666] text-[10px] uppercase pl-2">
+            {t("notifications")}
+          </DropdownMenuLabel>
           <DropdownMenuCheckboxItem
             checked={soundEnabled}
             onCheckedChange={setSoundEnabled}
-            className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
+            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
           >
-            {soundEnabled ? (
-              <>
-                <Volume2 size={16} className="mr-2" />
-                Sound On
-              </>
-            ) : (
-              <>
-                <VolumeX size={16} className="mr-2" />
-                Sound Off
-              </>
-            )}
+            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            {soundEnabled ? t("sound_on") : t("sound_off")}
           </DropdownMenuCheckboxItem>
         </div>
 
-        <DropdownMenuSeparator className="bg-white/5" />
+        <DropdownMenuSeparator className="bg-white/10" />
 
-        {/* Language Section */}
-        <div className="px-2 py-2">
-          <p className="text-xs font-semibold text-[#A1A1AA] px-2 mb-2">
-            Language
-          </p>
-
-          <DropdownMenuCheckboxItem
-            checked={language === "en"}
-            onCheckedChange={() => handleLanguageChange("en")}
-            className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
-          >
-            <Globe size={16} className="mr-2" />
-            English
-          </DropdownMenuCheckboxItem>
-
-          <DropdownMenuCheckboxItem
-            checked={language === "es"}
-            onCheckedChange={() => handleLanguageChange("es")}
-            className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
-          >
-            <Globe size={16} className="mr-2" />
-            Español
-          </DropdownMenuCheckboxItem>
-
-          <DropdownMenuCheckboxItem
-            checked={language === "fr"}
-            onCheckedChange={() => handleLanguageChange("fr")}
-            className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
-          >
-            <Globe size={16} className="mr-2" />
-            Français
-          </DropdownMenuCheckboxItem>
-
-          <DropdownMenuCheckboxItem
-            checked={language === "de"}
-            onCheckedChange={() => handleLanguageChange("de")}
-            className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
-          >
-            <Globe size={16} className="mr-2" />
-            Deutsch
-          </DropdownMenuCheckboxItem>
+        {/* Language */}
+        <div className="p-1">
+          <DropdownMenuLabel className="text-[#666] text-[10px] uppercase pl-2">
+            {t("language")}
+          </DropdownMenuLabel>
+          {["en", "es", "fr", "de"].map((lang) => (
+            <DropdownMenuCheckboxItem
+              key={lang}
+              checked={language === lang}
+              onCheckedChange={() => setLanguage(lang)}
+              className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
+            >
+              <Globe size={16} />{" "}
+              {lang === "en"
+                ? "English"
+                : lang === "es"
+                ? "Español"
+                : lang === "fr"
+                ? "Français"
+                : "Deutsch"}
+            </DropdownMenuCheckboxItem>
+          ))}
         </div>
 
-        <DropdownMenuSeparator className="bg-white/5" />
+        <DropdownMenuSeparator className="bg-white/10" />
 
-        {/* Account Section */}
-        <DropdownMenuItem
-          onClick={onProfile}
-          className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
-        >
-          <Shield size={16} className="mr-2" />
-          <span>View Profile</span>
-        </DropdownMenuItem>
-
-        <DropdownMenuItem
-          onClick={onTerms}
-          className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
-        >
-          <Shield size={16} className="mr-2" />
-          <span>Terms & Conditions</span>
-        </DropdownMenuItem>
-
-        <DropdownMenuSeparator className="bg-white/5" />
-
-        <DropdownMenuItem
-          onClick={onLogout}
-          className="cursor-pointer hover:bg-red-500/20 focus:bg-red-500/20 text-red-400"
-        >
-          <LogOut size={16} className="mr-2" />
-          <span>Logout</span>
-        </DropdownMenuItem>
+        {/* Account */}
+        <div className="p-1">
+          <DropdownMenuItem
+            onClick={onProfile}
+            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
+          >
+            <Shield size={16} /> {t("view_profile")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onTerms}
+            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
+          >
+            <Shield size={16} /> {t("terms")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={onLogout}
+            className="cursor-pointer hover:bg-red-500/20 focus:bg-red-500/20 text-red-400 gap-2 mt-1"
+          >
+            <LogOut size={16} /> {t("logout")}
+          </DropdownMenuItem>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
