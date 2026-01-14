@@ -7,7 +7,6 @@ import { SoundProvider } from "./contexts/SoundContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 
 // --- OPTIMIZATION: Lazy Load Pages ---
-// This splits the code so only necessary files load initially.
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const VerifyOTP = lazy(() => import("./pages/VerifyOTP"));
@@ -25,9 +24,19 @@ const PageLoader = () => (
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
-  const { token, loading } = useAuth();
+  const { token, user, loading } = useAuth();
+
+  // 1. Global loading check
   if (loading) return <PageLoader />;
+
+  // 2. Auth token check
   if (!token) return <Navigate to="/login" />;
+
+  // 3. User data safety check
+  // This is CRITICAL. It prevents the Chat component from mounting
+  // until the user object is fully ready, preventing the "Black Screen".
+  if (!user) return <PageLoader />;
+
   return children;
 };
 
@@ -46,6 +55,14 @@ export default function App() {
                     <Route path="/verify-otp" element={<VerifyOTP />} />
                     <Route
                       path="/"
+                      element={
+                        <ProtectedRoute>
+                          <Chat />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/chat"
                       element={
                         <ProtectedRoute>
                           <Chat />

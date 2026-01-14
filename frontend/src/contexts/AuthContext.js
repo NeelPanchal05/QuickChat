@@ -20,15 +20,7 @@ export const AuthProvider = ({ children }) => {
     process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
   const API = `${BACKEND_URL}/api`;
 
-  useEffect(() => {
-    if (token) {
-      fetchUser();
-    } else {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
+  // --- Socket Connection ---
   useEffect(() => {
     if (token) {
       const newSocket = io(BACKEND_URL, {
@@ -52,10 +44,24 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token, BACKEND_URL]);
 
-  const fetchUser = async () => {
+  // --- Initial Load User ---
+  useEffect(() => {
+    const initAuth = async () => {
+      if (token && !user) {
+        await fetchUser(token);
+      } else {
+        setLoading(false);
+      }
+    };
+    initAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const fetchUser = async (accessToken = token) => {
+    if (!accessToken) return;
     try {
       const response = await axios.get(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
       setUser(response.data);
     } catch (error) {
@@ -67,16 +73,28 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (loginData, password) => {
-    const response = await axios.post(`${API}/auth/login`, {
-      login: loginData,
-      password,
-    });
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API}/auth/login`, {
+        login: loginData,
+        password,
+      });
 
-    const { token: newToken, user: userData } = response.data;
-    setToken(newToken);
-    setUser(userData);
-    localStorage.setItem("token", newToken);
-    return response.data;
+      const { token: newToken } = response.data;
+
+      // 1. Save Token
+      localStorage.setItem("token", newToken);
+      setToken(newToken);
+
+      // 2. FORCE fetch full user profile before finishing
+      // This ensures 'user' has the exact same structure as a page reload
+      await fetchUser(newToken);
+
+      return response.data;
+    } catch (error) {
+      setLoading(false); // Stop loading on error
+      throw error;
+    }
   };
 
   const register = async (registerData) => {
@@ -85,13 +103,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const verifyOtp = async (email, otp) => {
-    const response = await axios.post(`${API}/auth/verify-otp`, { email, otp });
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API}/auth/verify-otp`, {
+        email,
+        otp,
+      });
 
-    const { token: newToken, user: userData } = response.data;
-    setToken(newToken);
-    setUser(userData);
-    localStorage.setItem("token", newToken);
-    return response.data;
+      const { token: newToken } = response.data;
+
+      // 1. Save Token
+      localStorage.setItem("token", newToken);
+      setToken(newToken);
+
+      // 2. FORCE fetch full user profile
+      await fetchUser(newToken);
+
+      return response.data;
+    } catch (error) {
+      setLoading(false); // Stop loading on error
+      throw error;
+    }
   };
 
   const logout = () => {
@@ -102,6 +134,7 @@ export const AuthProvider = ({ children }) => {
       socket.close();
       setSocket(null);
     }
+    setLoading(false);
   };
 
   return (
@@ -115,7 +148,7 @@ export const AuthProvider = ({ children }) => {
         register,
         verifyOtp,
         logout,
-        fetchUser, // EXPORTED NOW
+        fetchUser,
         API,
         BACKEND_URL,
       }}

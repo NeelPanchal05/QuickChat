@@ -248,6 +248,7 @@ export default function Chat() {
   };
 
   const addOptimisticMessage = (content, type, fileName = null) => {
+    if (!user) return;
     const tempId = `temp_${Date.now()}_${Math.random()}`;
     const optimisticMsg = {
       message_id: tempId,
@@ -338,8 +339,11 @@ export default function Chat() {
     }
   };
 
+  // --- Socket & User Effects ---
   useEffect(() => {
-    if (!socket) return;
+    // If user is not fully loaded, do not set up listeners yet to prevent crashes
+    if (!socket || !user) return;
+
     const handleNewMessage = (msg) => {
       const currentConv = selectedConversationRef.current;
 
@@ -405,7 +409,7 @@ export default function Chat() {
       socket.off("incoming_call", handleIncomingCall);
       socket.off("error", handleError);
     };
-  }, [socket, fetchConversations, playNotificationSound, user.user_id]);
+  }, [socket, fetchConversations, playNotificationSound, user]); // Added user dependency
 
   useEffect(() => {
     fetchConversations();
@@ -425,7 +429,8 @@ export default function Chat() {
   const sendMessage = async () => {
     if (
       (!messageInput.trim() && attachedFiles.length === 0) ||
-      !selectedConversation
+      !selectedConversation ||
+      !user
     )
       return;
 
@@ -502,6 +507,7 @@ export default function Chat() {
   // SAFE BLOCK CHECK FOR UI
   const isCurrentChatBlocked =
     selectedConversation &&
+    user &&
     (user.blocked_users || []).includes(
       selectedConversation.other_user?.user_id
     );
@@ -795,7 +801,7 @@ export default function Chat() {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
             {messages.map((m) => {
-              const isOwn = m.sender_id === user.user_id;
+              const isOwn = user && m.sender_id === user.user_id;
 
               // Prevent Poll crashes
               if (m.message_type === "poll") return null;
@@ -1006,7 +1012,7 @@ export default function Chat() {
         <CallModal
           callData={callData}
           socket={socket}
-          userId={user.user_id}
+          userId={user?.user_id}
           onClose={() => {
             setShowCall(false);
             setCallData(null);
