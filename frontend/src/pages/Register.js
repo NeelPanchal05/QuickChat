@@ -38,10 +38,14 @@ export default function Register() {
     setLoading(true);
 
     try {
+      console.log("Registering with data:", formData);
       const response = await register(formData);
+      console.log("Registration response:", response);
       toast.success("OTP sent to your email!");
       navigate("/verify-otp", { state: { email: formData.email } });
     } catch (error) {
+      console.error("Registration error:", error);
+      console.error("Error response:", error.response?.data);
       toast.error(error.response?.data?.detail || "Registration failed");
     } finally {
       setLoading(false);

@@ -98,8 +98,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (registerData) => {
-    const response = await axios.post(`${API}/auth/register`, registerData);
-    return response.data;
+    try {
+      console.log("Calling register API with URL:", `${API}/auth/register`);
+      const response = await axios.post(`${API}/auth/register`, registerData);
+      console.log("Register API response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Register API error:", error);
+      throw error;
+    }
   };
 
   const verifyOtp = async (email, otp) => {
