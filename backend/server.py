@@ -519,6 +519,25 @@ async def handle_message(sid, data):
         await sio.emit('error', {'message': reason}, to=sid)
         return
 
+    # Check Blocking Logic
+    conversation_id = data.get('conversation_id')
+    conversation = await db.conversations.find_one({'conversation_id': conversation_id})
+    if not conversation:
+        await sio.emit('error', {'message': 'Conversation not found'}, to=sid)
+        return
+
+    other_id = next((p for p in conversation['participants'] if p != user_id), None)
+    if other_id:
+        recipient = await db.users.find_one({'user_id': other_id})
+        if user_id in recipient.get('blocked_users', []):
+            await sio.emit('error', {'message': 'You cannot send messages to this user.'}, to=sid)
+            return
+        
+        sender = await db.users.find_one({'user_id': user_id})
+        if other_id in sender.get('blocked_users', []):
+            await sio.emit('error', {'message': 'You have blocked this user. Unblock to send messages.'}, to=sid)
+            return
+
     content = data.get('content')
     
     spam_content, reason = is_spam_message(content)

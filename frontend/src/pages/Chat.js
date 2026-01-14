@@ -26,6 +26,7 @@ import {
   Trash2,
   MoreVertical,
   Eraser,
+  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker from "emoji-picker-react";
@@ -61,7 +62,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function Chat() {
-  const { user, token, socket, logout, API } = useAuth();
+  const { user, token, socket, logout, API, fetchUser } = useAuth();
   const { currentThemeData } = useTheme();
   const { playNotificationSound } = useSound();
   const { t } = useLanguage();
@@ -192,6 +193,25 @@ export default function Chat() {
     }
   };
 
+  const blockUser = async (e, userId) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to block this user?")) return;
+    try {
+      await axios.post(
+        `${API}/users/block/${userId}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      await fetchUser(); // Refresh user context to update blocked list
+      toast.success("User blocked");
+      if (selectedConversation?.other_user?.user_id === userId) {
+        setSelectedConversation(null);
+      }
+    } catch (error) {
+      toast.error("Failed to block user");
+    }
+  };
+
   const deleteConversation = async (e, convId) => {
     e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this conversation?"))
@@ -232,7 +252,6 @@ export default function Chat() {
     const handleNewMessage = (msg) => {
       const currentConv = selectedConversationRef.current;
 
-      // Play sound for incoming messages (not own)
       if (msg.sender_id !== user.user_id) {
         playNotificationSound();
       }
@@ -269,18 +288,22 @@ export default function Chat() {
         newSet.delete(data.user_id);
         return newSet;
       });
+    const handleError = (data) => toast.error(data.message); // Handle backend blocking error
 
     socket.on("new_message", handleNewMessage);
     socket.on("user_typing", handleUserTyping);
     socket.on("user_online", handleOnline);
     socket.on("user_offline", handleOffline);
     socket.on("incoming_call", handleIncomingCall);
+    socket.on("error", handleError);
+
     return () => {
       socket.off("new_message", handleNewMessage);
       socket.off("user_typing", handleUserTyping);
       socket.off("user_online", handleOnline);
       socket.off("user_offline", handleOffline);
       socket.off("incoming_call", handleIncomingCall);
+      socket.off("error", handleError);
     };
   }, [socket, fetchConversations, playNotificationSound, user.user_id]);
 
@@ -305,6 +328,15 @@ export default function Chat() {
       !selectedConversation
     )
       return;
+
+    // UI Block Check
+    if (
+      user.blocked_users?.includes(selectedConversation.other_user?.user_id)
+    ) {
+      toast.error("You have blocked this user. Unblock to chat.");
+      return;
+    }
+
     if (messageInput.trim()) {
       const content = messageInput;
       const tempId = `temp_${Date.now()}`;
@@ -392,6 +424,11 @@ export default function Chat() {
     }
   };
 
+  // Helper to check blocked status
+  const isCurrentChatBlocked =
+    selectedConversation &&
+    user.blocked_users?.includes(selectedConversation.other_user?.user_id);
+
   return (
     <div className="h-screen flex flex-col md:flex-row bg-background font-sans overflow-hidden">
       {/* Sidebar */}
@@ -419,7 +456,6 @@ export default function Chat() {
               >
                 <UserPlus size={20} />
               </Button>
-              {/* SETTINGS MENU WITH NEW HANDLERS */}
               <SettingsMenu
                 onProfile={() => setShowProfile(true)}
                 onLogout={logout}
@@ -504,14 +540,38 @@ export default function Chat() {
                       : t("start_chatting")}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => deleteConversation(e, c.conversation_id)}
-                  className="opacity-0 group-hover:opacity-100 absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all h-8 w-8"
-                >
-                  <Trash2 size={16} />
-                </Button>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      >
+                        <MoreVertical size={16} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="bg-popover border-border"
+                    >
+                      <DropdownMenuItem
+                        onClick={(e) => blockUser(e, c.other_user?.user_id)}
+                        className="text-destructive focus:text-destructive cursor-pointer"
+                      >
+                        <UserX size={14} className="mr-2" /> Block User
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) =>
+                          deleteConversation(e, c.conversation_id)
+                        }
+                        className="text-destructive focus:text-destructive cursor-pointer"
+                      >
+                        <Trash2 size={14} className="mr-2" /> Delete Chat
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             </div>
           ))}
@@ -739,102 +799,110 @@ export default function Chat() {
             <div ref={messagesEndRef} />
           </div>
           <div className="p-3 backdrop-blur-md bg-card/80 border-t border-border">
-            {showMediaUploader && (
-              <MediaUploader
-                onUpload={(f) => setAttachedFiles((p) => [...p, f])}
-              />
-            )}
-            {attachedFiles.length > 0 && (
-              <div className="flex gap-2 mb-2 overflow-x-auto pb-2">
-                {attachedFiles.map((f) => (
-                  <div
-                    key={f.id}
-                    className="bg-muted px-3 py-1 rounded-full flex items-center gap-2 text-foreground text-xs"
-                  >
-                    {f.name}{" "}
-                    <X
-                      size={12}
-                      className="cursor-pointer"
-                      onClick={() =>
-                        setAttachedFiles(
-                          attachedFiles.filter((x) => x.id !== f.id)
-                        )
-                      }
+            {isCurrentChatBlocked ? (
+              <div className="w-full text-center p-2 text-destructive font-medium bg-destructive/10 rounded-lg">
+                You have blocked this user. Unblock to send messages.
+              </div>
+            ) : (
+              <>
+                {showMediaUploader && (
+                  <MediaUploader
+                    onUpload={(f) => setAttachedFiles((p) => [...p, f])}
+                  />
+                )}
+                {attachedFiles.length > 0 && (
+                  <div className="flex gap-2 mb-2 overflow-x-auto pb-2">
+                    {attachedFiles.map((f) => (
+                      <div
+                        key={f.id}
+                        className="bg-muted px-3 py-1 rounded-full flex items-center gap-2 text-foreground text-xs"
+                      >
+                        {f.name}{" "}
+                        <X
+                          size={12}
+                          className="cursor-pointer"
+                          onClick={() =>
+                            setAttachedFiles(
+                              attachedFiles.filter((x) => x.id !== f.id)
+                            )
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showEmojiPicker && (
+                  <div className="absolute bottom-20">
+                    <EmojiPicker
+                      theme={currentThemeData.bgStyle ? "dark" : "auto"}
+                      onEmojiClick={(e) => setMessageInput((p) => p + e.emoji)}
                     />
                   </div>
-                ))}
-              </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowMediaUploader(!showMediaUploader)}
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <Paperclip size={20} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <Smile size={20} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={sendLocation}
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <MapPin size={20} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowPollCreator(true)}
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <BarChart3 size={20} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowBackgroundSelector(true)}
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <Settings size={20} />
+                    </Button>
+                  </div>
+                  <Input
+                    value={messageInput}
+                    onChange={(e) => {
+                      setMessageInput(e.target.value);
+                      socket?.emit("typing", {
+                        conversation_id: selectedConversation.conversation_id,
+                      });
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                    placeholder={t("type_message")}
+                    className="flex-1 bg-muted border-border text-foreground rounded-full"
+                  />
+                  <Button
+                    onClick={sendMessage}
+                    className="bg-primary hover:bg-primary/90 rounded-full w-10 h-10 p-0 flex items-center justify-center"
+                  >
+                    <Send size={18} className="ml-1 text-primary-foreground" />
+                  </Button>
+                </div>
+              </>
             )}
-            {showEmojiPicker && (
-              <div className="absolute bottom-20">
-                <EmojiPicker
-                  theme={currentThemeData.bgStyle ? "dark" : "auto"}
-                  onEmojiClick={(e) => setMessageInput((p) => p + e.emoji)}
-                />
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowMediaUploader(!showMediaUploader)}
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <Paperclip size={20} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <Smile size={20} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={sendLocation}
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <MapPin size={20} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowPollCreator(true)}
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <BarChart3 size={20} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowBackgroundSelector(true)}
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <Settings size={20} />
-                </Button>
-              </div>
-              <Input
-                value={messageInput}
-                onChange={(e) => {
-                  setMessageInput(e.target.value);
-                  socket?.emit("typing", {
-                    conversation_id: selectedConversation.conversation_id,
-                  });
-                }}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                placeholder={t("type_message")}
-                className="flex-1 bg-muted border-border text-foreground rounded-full"
-              />
-              <Button
-                onClick={sendMessage}
-                className="bg-primary hover:bg-primary/90 rounded-full w-10 h-10 p-0 flex items-center justify-center"
-              >
-                <Send size={18} className="ml-1 text-primary-foreground" />
-              </Button>
-            </div>
           </div>
         </div>
       ) : (

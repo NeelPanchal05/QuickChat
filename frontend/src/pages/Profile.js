@@ -1,39 +1,97 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Camera, User, Mail, Save, X, Hash } from "lucide-react";
+import { Camera, User, Mail, Save, Hash } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
 export default function Profile({ onBack }) {
   const { user, token, API } = useAuth();
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef(null);
+
   const [formData, setFormData] = useState({
     real_name: user?.real_name || "",
     bio: user?.bio || "",
-    // Note: Email and Username are typically read-only or handled via separate flows for security
+    profile_photo: user?.profile_photo || "",
   });
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleImageClick = () => {
+    fileInputRef.current.click();
+  };
+
+  // --- NEW: Image Compression Function ---
+  const compressImage = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 500; // Resize to max 500px width
+          const MAX_HEIGHT = 500;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Compress to JPEG with 0.7 quality (significantly reduces size)
+          resolve(canvas.toDataURL("image/jpeg", 0.7));
+        };
+      };
+    });
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const compressedBase64 = await compressImage(file);
+      setFormData((prev) => ({ ...prev, profile_photo: compressedBase64 }));
+    } catch (err) {
+      toast.error("Failed to process image");
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Assuming 'update_profile' endpoint expects these fields
-      const res = await axios.put(`${API}/users/profile`, formData, {
+      await axios.put(`${API}/users/profile`, formData, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Update local storage or context if needed, usually context refetches or we update user object
       toast.success("Profile updated successfully!");
-      if (onBack) onBack(); // Optional: close modal on success
+
+      // Force a reload to ensure the new optimized image is used everywhere
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to update profile.");
+      toast.error("Failed to update profile. Try a smaller image.");
     } finally {
       setLoading(false);
     }
@@ -46,17 +104,26 @@ export default function Profile({ onBack }) {
     <div className="w-full h-full flex flex-col bg-background text-foreground">
       <div className="flex items-center justify-between p-4 border-b border-border">
         <h2 className="text-xl font-bold">Edit Profile</h2>
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <X size={20} />
-        </Button>
+        {/* Close button handled by Dialog */}
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Avatar Section */}
         <div className="flex flex-col items-center gap-4">
-          <div className="relative group cursor-pointer">
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept="image/*"
+            onChange={handleFileChange}
+          />
+
+          <div
+            className="relative group cursor-pointer"
+            onClick={handleImageClick}
+          >
             <Avatar className="w-24 h-24 border-2 border-primary">
-              <AvatarImage src={user?.profile_photo} />
+              <AvatarImage src={formData.profile_photo} />
               <AvatarFallback className="text-2xl">{initials}</AvatarFallback>
             </Avatar>
             <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

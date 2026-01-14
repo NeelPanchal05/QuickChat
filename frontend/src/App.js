@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -6,16 +6,27 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { SoundProvider } from "./contexts/SoundContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 
-// Pages
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import VerifyOTP from "./pages/VerifyOTP";
-import Chat from "./pages/Chat";
+// --- OPTIMIZATION: Lazy Load Pages ---
+// This splits the code so only necessary files load initially.
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const VerifyOTP = lazy(() => import("./pages/VerifyOTP"));
+const Chat = lazy(() => import("./pages/Chat"));
+
+// Loading Component
+const PageLoader = () => (
+  <div className="h-screen w-full flex items-center justify-center bg-background text-foreground">
+    <div className="animate-pulse flex flex-col items-center">
+      <div className="h-12 w-12 bg-primary rounded-full mb-4"></div>
+      <p className="text-sm text-muted-foreground">Loading QuickChat...</p>
+    </div>
+  </div>
+);
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   const { token, loading } = useAuth();
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <PageLoader />;
   if (!token) return <Navigate to="/login" />;
   return children;
 };
@@ -28,19 +39,21 @@ export default function App() {
           <SoundProvider>
             <LanguageProvider>
               <div className="bg-background text-foreground min-h-screen">
-                <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/verify-otp" element={<VerifyOTP />} />
-                  <Route
-                    path="/"
-                    element={
-                      <ProtectedRoute>
-                        <Chat />
-                      </ProtectedRoute>
-                    }
-                  />
-                </Routes>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Register />} />
+                    <Route path="/verify-otp" element={<VerifyOTP />} />
+                    <Route
+                      path="/"
+                      element={
+                        <ProtectedRoute>
+                          <Chat />
+                        </ProtectedRoute>
+                      }
+                    />
+                  </Routes>
+                </Suspense>
                 <Toaster />
               </div>
             </LanguageProvider>

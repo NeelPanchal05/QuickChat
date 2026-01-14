@@ -30,8 +30,6 @@ export const AuthProvider = ({ children }) => {
   }, [token]);
 
   useEffect(() => {
-    // Only connect if we have a token.
-    // REMOVED 'user' from dependencies to prevent constant reconnection.
     if (token) {
       const newSocket = io(BACKEND_URL, {
         auth: { token },
@@ -52,7 +50,7 @@ export const AuthProvider = ({ children }) => {
         newSocket.close();
       };
     }
-  }, [token, BACKEND_URL]); // <--- FIXED: Removed 'user' dependency
+  }, [token, BACKEND_URL]);
 
   const fetchUser = async () => {
     try {
@@ -117,6 +115,7 @@ export const AuthProvider = ({ children }) => {
         register,
         verifyOtp,
         logout,
+        fetchUser, // EXPORTED NOW
         API,
         BACKEND_URL,
       }}
