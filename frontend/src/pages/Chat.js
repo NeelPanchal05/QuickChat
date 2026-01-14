@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import axios from "axios";
@@ -83,63 +83,13 @@ export default function Chat() {
   const [showCall, setShowCall] = useState(false);
   const [callData, setCallData] = useState(null);
 
+  // Refs for stable state access inside listeners
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const selectedConversationRef = useRef(selectedConversation);
 
-  // --- Effects ---
-  useEffect(() => {
-    if (socket) {
-      socket.on("new_message", handleNewMessage);
-      socket.on("user_typing", handleUserTyping);
-      socket.on("user_online", (data) =>
-        setOnlineUsers((p) => new Set([...p, data.user_id]))
-      );
-      socket.on("user_offline", (data) =>
-        setOnlineUsers((p) => {
-          const newSet = new Set(p);
-          newSet.delete(data.user_id);
-          return newSet;
-        })
-      );
-      socket.on("incoming_call", handleIncomingCall);
-      socket.on("error", (data) => toast.error(data.message));
-
-      return () => {
-        socket.off("new_message");
-        socket.off("user_typing");
-        socket.off("user_online");
-        socket.off("user_offline");
-        socket.off("incoming_call");
-        socket.off("error");
-      };
-    }
-  }, [socket]);
-
-  useEffect(() => {
-    fetchConversations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedConversation) {
-      fetchMessages(selectedConversation.conversation_id);
-      socket?.emit("join_conversation", {
-        conversation_id: selectedConversation.conversation_id,
-      });
-    }
-    return () => {
-      if (selectedConversation)
-        socket?.emit("leave_conversation", {
-          conversation_id: selectedConversation.conversation_id,
-        });
-    };
-  }, [selectedConversation]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  // --- API Calls ---
-  const fetchConversations = async () => {
+  // --- API Functions (Wrapped in useCallback to fix lint warnings) ---
+  const fetchConversations = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/conversations`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -148,22 +98,26 @@ export default function Chat() {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [API, token]);
 
-  const fetchMessages = async (convId, dates = null) => {
-    try {
-      let url = `${API}/conversations/${convId}/messages`;
-      if (dates) {
-        url += `?start_date=${dates.start}&end_date=${dates.end}`;
+  const fetchMessages = useCallback(
+    async (convId, dates = null) => {
+      try {
+        let url = `${API}/conversations/${convId}/messages`;
+        if (dates && dates.start) {
+          url += `?start_date=${dates.start}`;
+          if (dates.end) url += `&end_date=${dates.end}`;
+        }
+        const res = await axios.get(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setMessages(res.data);
+      } catch (e) {
+        console.error(e);
       }
-      const res = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMessages(res.data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+    },
+    [API, token]
+  );
 
   const searchUsers = async (query) => {
     if (!query.trim()) {
@@ -218,22 +172,98 @@ export default function Chat() {
     }
   };
 
-  // --- Handlers ---
-  const handleNewMessage = (msg) => {
-    if (msg.conversation_id === selectedConversation?.conversation_id) {
-      setMessages((p) => [...p, msg]);
-    }
+  // --- Sync Ref with State ---
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
+
+  // --- Socket Listeners ---
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewMessage = (msg) => {
+      const currentConv = selectedConversationRef.current;
+
+      if (currentConv && msg.conversation_id === currentConv.conversation_id) {
+        setMessages((prev) => [...prev, msg]);
+        socket.emit("message_read", {
+          message_id: msg.message_id,
+          conversation_id: msg.conversation_id,
+        });
+      }
+      // fetchConversations is now a stable dependency due to useCallback
+      fetchConversations();
+    };
+
+    const handleUserTyping = (data) => {
+      const currentConv = selectedConversationRef.current;
+      if (currentConv && data.conversation_id === currentConv.conversation_id) {
+        setTyping(data.user_id);
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => setTyping(null), 3000);
+      }
+    };
+
+    const handleIncomingCall = (data) => {
+      setCallData({ ...data, incoming: true });
+      setShowCall(true);
+    };
+
+    const handleOnline = (data) =>
+      setOnlineUsers((p) => new Set([...p, data.user_id]));
+    const handleOffline = (data) =>
+      setOnlineUsers((p) => {
+        const newSet = new Set(p);
+        newSet.delete(data.user_id);
+        return newSet;
+      });
+    const handleError = (data) => toast.error(data.message);
+
+    socket.on("new_message", handleNewMessage);
+    socket.on("user_typing", handleUserTyping);
+    socket.on("user_online", handleOnline);
+    socket.on("user_offline", handleOffline);
+    socket.on("incoming_call", handleIncomingCall);
+    socket.on("error", handleError);
+
+    return () => {
+      socket.off("new_message", handleNewMessage);
+      socket.off("user_typing", handleUserTyping);
+      socket.off("user_online", handleOnline);
+      socket.off("user_offline", handleOffline);
+      socket.off("incoming_call", handleIncomingCall);
+      socket.off("error", handleError);
+    };
+  }, [socket, fetchConversations]);
+
+  // --- Initial Load ---
+  useEffect(() => {
     fetchConversations();
-  };
+  }, [fetchConversations]);
 
-  const handleUserTyping = (data) => {
-    if (data.conversation_id === selectedConversation?.conversation_id) {
-      setTyping(data.user_id);
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => setTyping(null), 3000);
+  // --- Conversation Switching ---
+  useEffect(() => {
+    if (selectedConversation) {
+      fetchMessages(selectedConversation.conversation_id);
+      socket?.emit("join_conversation", {
+        conversation_id: selectedConversation.conversation_id,
+      });
     }
-  };
+    return () => {
+      if (selectedConversation) {
+        socket?.emit("leave_conversation", {
+          conversation_id: selectedConversation.conversation_id,
+        });
+      }
+    };
+  }, [selectedConversation, fetchMessages, socket]);
 
+  // --- Auto Scroll ---
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // --- Messaging Functions ---
   const sendMessage = async () => {
     if (
       (!messageInput.trim() && attachedFiles.length === 0) ||
@@ -241,7 +271,6 @@ export default function Chat() {
     )
       return;
 
-    // Send Text
     if (messageInput.trim()) {
       socket?.emit("send_message", {
         conversation_id: selectedConversation.conversation_id,
@@ -250,24 +279,27 @@ export default function Chat() {
       });
     }
 
-    // Send Attachments
     for (const file of attachedFiles) {
-      await axios.post(
-        `${API}/conversations/${selectedConversation.conversation_id}/messages`,
-        {
+      try {
+        await axios.post(
+          `${API}/conversations/${selectedConversation.conversation_id}/messages`,
+          {
+            content: file.data,
+            message_type: file.type,
+            file_name: file.name,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        socket?.emit("send_message", {
+          conversation_id: selectedConversation.conversation_id,
           content: file.data,
           message_type: file.type,
           file_name: file.name,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      // Note: socket emission for attachments is handled by backend or separate emission here
-      socket?.emit("send_message", {
-        conversation_id: selectedConversation.conversation_id,
-        content: file.data,
-        message_type: file.type,
-        file_name: file.name,
-      });
+        });
+      } catch (error) {
+        toast.error(`Failed to send ${file.name}`);
+      }
     }
 
     setMessageInput("");
@@ -300,6 +332,7 @@ export default function Chat() {
   const isUserOnline = (userId) => onlineUsers.has(userId);
 
   const startCall = (callType) => {
+    if (!selectedConversation) return;
     setCallData({
       callType,
       otherUser: selectedConversation.other_user,
@@ -308,15 +341,10 @@ export default function Chat() {
     setShowCall(true);
   };
 
-  const handleIncomingCall = (data) => {
-    setCallData({ ...data, incoming: true });
-    setShowCall(true);
-  };
-
   // --- Render ---
   return (
     <div className="h-screen flex flex-col md:flex-row bg-[#050505] font-sans overflow-hidden">
-      {/* Sidebar - Responsive handling: Hidden on mobile if chat selected */}
+      {/* Sidebar */}
       <div
         className={`${
           selectedConversation ? "hidden md:flex" : "flex"
@@ -325,7 +353,6 @@ export default function Chat() {
         <div className="p-4 border-b border-white/5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              {/* Logo Placeholder */}
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#7000FF] to-blue-600 flex items-center justify-center">
                 <MessageCircle className="text-white w-5 h-5" />
               </div>
@@ -422,8 +449,10 @@ export default function Chat() {
                     )}
                   </div>
                   <p className="text-xs text-[#888] truncate">
-                    {c.last_message?.content?.substring(0, 30) ||
-                      "Start chatting..."}
+                    {c.last_message?.content
+                      ? c.last_message.content.substring(0, 30) +
+                        (c.last_message.content.length > 30 ? "..." : "")
+                      : "Start chatting..."}
                   </p>
                 </div>
               </div>
@@ -463,11 +492,18 @@ export default function Chat() {
                 <h3 className="font-bold text-white text-sm">
                   {selectedConversation.other_user?.real_name}
                 </h3>
-                <span className="text-xs text-gray-400">
-                  {isUserOnline(selectedConversation.other_user?.user_id)
-                    ? "Online"
-                    : "Offline"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">
+                    {isUserOnline(selectedConversation.other_user?.user_id)
+                      ? "Online"
+                      : "Offline"}
+                  </span>
+                  {typing === selectedConversation.other_user?.user_id && (
+                    <span className="text-xs text-[#7000FF] animate-pulse">
+                      typing...
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex gap-1 md:gap-2">
@@ -504,20 +540,38 @@ export default function Chat() {
                     Search by Date
                   </h4>
                   <div className="space-y-2">
-                    <Input
-                      type="date"
-                      className="bg-white/10 text-white"
-                      onChange={(e) =>
-                        setDateSearch({ ...dateSearch, start: e.target.value })
-                      }
-                    />
-                    <Input
-                      type="date"
-                      className="bg-white/10 text-white"
-                      onChange={(e) =>
-                        setDateSearch({ ...dateSearch, end: e.target.value })
-                      }
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-gray-400">
+                          Start Date
+                        </label>
+                        <Input
+                          type="date"
+                          className="bg-white/10 text-white"
+                          onChange={(e) =>
+                            setDateSearch({
+                              ...dateSearch,
+                              start: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400">
+                          End Date
+                        </label>
+                        <Input
+                          type="date"
+                          className="bg-white/10 text-white"
+                          onChange={(e) =>
+                            setDateSearch({
+                              ...dateSearch,
+                              end: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
                     <Button
                       className="w-full bg-[#7000FF]"
                       onClick={() =>
@@ -527,7 +581,7 @@ export default function Chat() {
                         )
                       }
                     >
-                      Search
+                      Search Messages
                     </Button>
                   </div>
                 </PopoverContent>
@@ -562,6 +616,11 @@ export default function Chat() {
                   >
                     {/* Content Rendering based on Type */}
                     {m.message_type === "text" && <p>{m.content}</p>}
+                    {m.message_type === "poll" && (
+                      <div className="italic text-sm">
+                        Poll: {JSON.parse(m.content).question}
+                      </div>
+                    )}
                     {m.message_type === "location" && (
                       <a
                         href={m.content}
@@ -579,15 +638,30 @@ export default function Chat() {
                         className="rounded-lg max-h-60"
                       />
                     )}
-                    {["audio", "video"].includes(
-                      m.message_type?.split("/")[0]
-                    ) && (
-                      <video
-                        controls
-                        src={m.content}
-                        className="max-w-full rounded-lg"
-                      />
-                    )}
+                    {m.message_type &&
+                      ["audio", "video"].includes(
+                        m.message_type.split("/")[0]
+                      ) && (
+                        <video
+                          controls
+                          src={m.content}
+                          className="max-w-full rounded-lg"
+                        />
+                      )}
+                    {m.message_type &&
+                      !["text", "location", "image", "poll"].includes(
+                        m.message_type
+                      ) &&
+                      !["audio", "video"].includes(
+                        m.message_type.split("/")[0]
+                      ) && (
+                        <div className="flex items-center gap-2">
+                          <Paperclip size={16} />
+                          <span className="text-sm underline">
+                            {m.file_name || "Attached File"}
+                          </span>
+                        </div>
+                      )}
 
                     <div className="flex justify-between items-center mt-1 gap-2">
                       <span className="text-[10px] opacity-70">
