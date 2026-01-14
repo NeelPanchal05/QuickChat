@@ -16,7 +16,6 @@ import {
   Send,
   Smile,
   Pin,
-  Settings,
   BarChart3,
   Shield,
   MapPin,
@@ -40,7 +39,7 @@ import PrivacyManager from "@/components/PrivacyManager";
 import MediaUploader from "@/components/MediaUploader";
 import GifPicker from "@/components/GifPicker";
 import PollCreator from "@/components/PollCreator";
-import BlockedUsersManager from "@/components/BlockedUsersManager";
+import PollDisplay from "@/components/PollDisplay";
 import MessageReadStatus from "@/components/MessageReadStatus";
 import Profile from "@/pages/Profile";
 import TermsAndConditions from "@/pages/TermsAndConditions";
@@ -99,7 +98,6 @@ export default function Chat() {
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [showPollCreator, setShowPollCreator] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  const [showBlockedUsers, setShowBlockedUsers] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
 
   // Call States
@@ -253,7 +251,6 @@ export default function Chat() {
     }
   };
 
-  // --- Helper: Add Optimistic Message ---
   const addOptimisticMessage = (content, type, fileName = null) => {
     const tempId = `temp_${Date.now()}_${Math.random()}`;
     const optimisticMsg = {
@@ -286,7 +283,6 @@ export default function Chat() {
     });
   };
 
-  // --- Voice Recording Functions ---
   const startRecording = async () => {
     if (!selectedConversation) return;
     try {
@@ -310,11 +306,9 @@ export default function Chat() {
         reader.onloadend = async () => {
           const base64data = reader.result;
 
-          // 1. Show Instantly (Optimistic)
           addOptimisticMessage(base64data, "audio/webm", "voice_message.webm");
 
           try {
-            // 2. Upload to Server (Server broadcasts automatically)
             await axios.post(
               `${API}/conversations/${selectedConversation.conversation_id}/messages`,
               {
@@ -348,18 +342,13 @@ export default function Chat() {
     }
   };
 
-  // --- Socket Listeners ---
   useEffect(() => {
     if (!socket) return;
     const handleNewMessage = (msg) => {
       const currentConv = selectedConversationRef.current;
 
-      // Handle dupes from optimistic updates
       setMessages((prev) => {
         if (prev.some((m) => m.message_id === msg.message_id)) return prev;
-        // If we have a temp message with matching content/timestamp, could dedupe here,
-        // but checking ID is safer. Optimistic messages stay until refresh or we can replace them.
-        // For simplicity in this prototype, we append.
         return [...prev, msg];
       });
 
@@ -369,10 +358,15 @@ export default function Chat() {
           currentConv &&
           msg.conversation_id === currentConv.conversation_id
         ) {
-          socket.emit("message_read", {
-            message_id: msg.message_id,
-            conversation_id: msg.conversation_id,
-          });
+          const allowReadReceipts = JSON.parse(
+            localStorage.getItem("privacy_read_receipts") ?? "true"
+          );
+          if (allowReadReceipts) {
+            socket.emit("message_read", {
+              message_id: msg.message_id,
+              conversation_id: msg.conversation_id,
+            });
+          }
         }
       }
       fetchConversations();
@@ -439,14 +433,13 @@ export default function Chat() {
     )
       return;
 
-    if (
-      user.blocked_users?.includes(selectedConversation.other_user?.user_id)
-    ) {
+    // SAFE BLOCK CHECK
+    const blockedList = user.blocked_users || [];
+    if (blockedList.includes(selectedConversation.other_user?.user_id)) {
       toast.error("You have blocked this user. Unblock to chat.");
       return;
     }
 
-    // 1. Text Message
     if (messageInput.trim()) {
       addOptimisticMessage(messageInput, "text");
       socket?.emit("send_message", {
@@ -456,7 +449,6 @@ export default function Chat() {
       });
     }
 
-    // 2. Attachments
     for (const file of attachedFiles) {
       addOptimisticMessage(file.data, file.type, file.name);
 
@@ -466,7 +458,6 @@ export default function Chat() {
           { content: file.data, message_type: file.type, file_name: file.name },
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        // Note: No socket emit here; Server handles it now
       } catch (error) {
         toast.error(`Failed to send ${file.name}`);
       }
@@ -487,10 +478,7 @@ export default function Chat() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const locationUrl = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-
-        // Optimistic Update
         addOptimisticMessage(locationUrl, "location");
-
         socket?.emit("send_message", {
           conversation_id: selectedConversation.conversation_id,
           content: locationUrl,
@@ -515,9 +503,12 @@ export default function Chat() {
     }
   };
 
+  // SAFE BLOCK CHECK FOR UI
   const isCurrentChatBlocked =
     selectedConversation &&
-    user.blocked_users?.includes(selectedConversation.other_user?.user_id);
+    (user.blocked_users || []).includes(
+      selectedConversation.other_user?.user_id
+    );
 
   return (
     <div className="h-screen flex flex-col md:flex-row bg-background font-sans overflow-hidden">
@@ -551,7 +542,6 @@ export default function Chat() {
                 onLogout={logout}
                 onTerms={() => setShowTerms(true)}
                 onBackgrounds={() => setShowBackgroundSelector(true)}
-                onBlockedUsers={() => setShowBlockedUsers(true)}
                 onPrivacy={() => setShowPrivacy(true)}
               />
             </div>
@@ -826,9 +816,7 @@ export default function Chat() {
                   >
                     {m.message_type === "text" && <p>{m.content}</p>}
                     {m.message_type === "poll" && (
-                      <div className="italic text-sm">
-                        {t("poll")}: {JSON.parse(m.content).question}
-                      </div>
+                      <PollDisplay pollData={JSON.parse(m.content)} />
                     )}
                     {m.message_type === "location" && (
                       <a
@@ -965,14 +953,7 @@ export default function Chat() {
                     >
                       <BarChart3 size={20} />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowBackgroundSelector(true)}
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <Settings size={20} />
-                    </Button>
+
                     <Button
                       variant="ghost"
                       size="icon"
@@ -1067,7 +1048,7 @@ export default function Chat() {
         </DialogContent>
       </Dialog>
       <Dialog open={showPrivacy} onOpenChange={setShowPrivacy}>
-        <DialogContent className="max-w-xl bg-card border-border">
+        <DialogContent className="max-w-xl bg-card border-border p-0">
           <PrivacyManager onClose={() => setShowPrivacy(false)} />
         </DialogContent>
       </Dialog>
@@ -1107,11 +1088,6 @@ export default function Chat() {
               }
             }}
           />
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showBlockedUsers} onOpenChange={setShowBlockedUsers}>
-        <DialogContent className="max-w-md bg-card border-border">
-          <BlockedUsersManager onClose={() => setShowBlockedUsers(false)} />
         </DialogContent>
       </Dialog>
       <Dialog open={showInvite} onOpenChange={setShowInvite}>

@@ -18,6 +18,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+from bson import ObjectId
 
 # Import local modules
 from encryption import encrypt_message, decrypt_message
@@ -64,8 +65,8 @@ app.add_middleware(
 security = HTTPBearer()
 
 # In-memory storage
-active_users = {}  # {user_id: socket_id}
-user_sockets = {}  # {socket_id: user_id}
+active_users = {}
+user_sockets = {}
 
 # ==================== Models ====================
 
@@ -88,6 +89,10 @@ class UserUpdate(BaseModel):
     real_name: Optional[str] = None
     profile_photo: Optional[str] = None
     bio: Optional[str] = None
+
+class ChangePassword(BaseModel):
+    old_password: str
+    new_password: str
 
 class ConversationCreate(BaseModel):
     participant_id: str
@@ -129,6 +134,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = await db.users.find_one({'user_id': user_id}, {'_id': 0})
         if not user:
             raise HTTPException(status_code=401, detail='User not found')
+        
+        # Ensure blocked_users exists
+        if 'blocked_users' not in user:
+            user['blocked_users'] = []
+            
         return user
     except Exception:
         raise HTTPException(status_code=401, detail='Invalid token')
@@ -230,12 +240,33 @@ async def login(data: UserLogin):
         raise HTTPException(status_code=401, detail='Invalid credentials')
     
     token = create_access_token({'sub': user['user_id']})
+    # Safe user object creation
     user_res = {k: v for k, v in user.items() if k not in ['_id', 'password_hash']}
+    if 'blocked_users' not in user_res:
+        user_res['blocked_users'] = []
+        
     return {'token': token, 'user': user_res}
 
 @app.get('/api/auth/me')
 async def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
+
+@app.post('/api/auth/change-password')
+async def change_password(data: ChangePassword, current_user: dict = Depends(get_current_user)):
+    user = await db.users.find_one({'user_id': current_user['user_id']})
+    if not verify_password(data.old_password, user['password_hash']):
+        raise HTTPException(status_code=400, detail="Incorrect old password")
+    
+    new_hash = hash_password(data.new_password)
+    await db.users.update_one({'user_id': current_user['user_id']}, {'$set': {'password_hash': new_hash}})
+    return {"message": "Password updated successfully"}
+
+@app.delete('/api/auth/delete-account')
+async def delete_account(current_user: dict = Depends(get_current_user)):
+    user_id = current_user['user_id']
+    await db.users.delete_one({'user_id': user_id})
+    await db.conversations.update_many({}, {'$pull': {'participants': user_id}})
+    return {"message": "Account deleted successfully"}
 
 # ==================== User & Social Endpoints ====================
 
@@ -328,7 +359,6 @@ async def get_conversations(current_user: dict = Depends(get_current_user)):
             {'_id': 0}, sort=[('timestamp', -1)]
         )
         if last_msg:
-             # Decrypt for preview
              last_msg['content'] = decrypt_message(last_msg['content'])
              
         conv['last_message'] = last_msg
@@ -350,7 +380,6 @@ async def get_messages(
     if before:
         query['timestamp'] = {'$lt': before}
     
-    # Date Search Logic
     if start_date:
         date_query = {'$gte': start_date}
         if end_date:
@@ -359,7 +388,6 @@ async def get_messages(
 
     messages = await db.messages.find(query, {'_id': 0}).sort('timestamp', -1).limit(limit).to_list(limit)
     
-    # Decrypt messages
     for msg in messages:
         msg['content'] = decrypt_message(msg['content'])
         
@@ -394,8 +422,6 @@ async def save_attachment_message(
     await db.messages.insert_one(doc)
     await db.conversations.update_one({'conversation_id': conversation_id}, {'$set': {'updated_at': doc['timestamp']}})
     
-    # OPTIMIZATION: Broadcast immediately from server side
-    # This ensures the receiver gets it as soon as upload is done, without waiting for another client roundtrip
     response_doc = doc.copy()
     response_doc['content'] = content 
     del response_doc['_id']
@@ -462,13 +488,27 @@ async def create_poll(poll_data: Poll, current_user: dict = Depends(get_current_
     poll['_id'] = str(res.inserted_id)
     return poll
 
+@app.get('/api/polls/{poll_id}')
+async def get_poll(poll_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        poll = await db.polls.find_one({'_id': ObjectId(poll_id)})
+        if not poll:
+            raise HTTPException(status_code=404, detail="Poll not found")
+        poll['_id'] = str(poll['_id'])
+        return poll
+    except:
+        raise HTTPException(status_code=400, detail="Invalid poll ID")
+
 @app.post('/api/polls/{poll_id}/vote')
 async def vote_poll(poll_id: str, option_index: int, current_user: dict = Depends(get_current_user)):
-    await db.polls.update_one(
-        {'_id': poll_id},
-        {'$addToSet': {f'options.{option_index}.votes': current_user['user_id']}}
-    )
-    return {'message': 'Voted'}
+    try:
+        await db.polls.update_one(
+            {'_id': ObjectId(poll_id)},
+            {'$addToSet': {f'options.{option_index}.votes': current_user['user_id']}}
+        )
+        return {'message': 'Voted'}
+    except:
+        raise HTTPException(status_code=400, detail="Vote failed")
 
 # ==================== Call History ====================
 
@@ -532,12 +572,18 @@ async def handle_message(sid, data):
     other_id = next((p for p in conversation['participants'] if p != user_id), None)
     if other_id:
         recipient = await db.users.find_one({'user_id': other_id})
-        if user_id in recipient.get('blocked_users', []):
+        blocked_by_recipient = recipient.get('blocked_users', [])
+        if blocked_by_recipient is None: blocked_by_recipient = []
+        
+        if user_id in blocked_by_recipient:
             await sio.emit('error', {'message': 'You cannot send messages to this user.'}, to=sid)
             return
         
         sender = await db.users.find_one({'user_id': user_id})
-        if other_id in sender.get('blocked_users', []):
+        blocked_by_sender = sender.get('blocked_users', [])
+        if blocked_by_sender is None: blocked_by_sender = []
+
+        if other_id in blocked_by_sender:
             await sio.emit('error', {'message': 'You have blocked this user. Unblock to send messages.'}, to=sid)
             return
 

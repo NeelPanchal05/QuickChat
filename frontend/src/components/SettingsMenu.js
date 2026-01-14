@@ -18,7 +18,6 @@ import {
   Shield,
   LogOut,
   Image as ImageIcon,
-  UserX,
   Lock,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -30,7 +29,6 @@ export default function SettingsMenu({
   onLogout,
   onTerms,
   onBackgrounds,
-  onBlockedUsers,
   onPrivacy,
 }) {
   const { theme, setTheme } = useTheme();
@@ -61,12 +59,6 @@ export default function SettingsMenu({
             className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
           >
             <ImageIcon size={16} /> {t("chat_wallpapers")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={onBlockedUsers}
-            className="cursor-pointer hover:bg-white/10 focus:bg-white/10 gap-2"
-          >
-            <UserX size={16} /> {t("blocked_users")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={onPrivacy}
