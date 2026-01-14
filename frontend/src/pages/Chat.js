@@ -27,6 +27,8 @@ import {
   MoreVertical,
   Eraser,
   UserX,
+  Mic,
+  Square,
 } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker from "emoji-picker-react";
@@ -81,6 +83,11 @@ export default function Chat() {
   const [typing, setTyping] = useState(null);
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [dateSearch, setDateSearch] = useState({ start: "", end: "" });
+
+  // Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   // Modal States
   const [showProfile, setShowProfile] = useState(false);
@@ -202,7 +209,7 @@ export default function Chat() {
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      await fetchUser(); // Refresh user context to update blocked list
+      await fetchUser();
       toast.success("User blocked");
       if (selectedConversation?.other_user?.user_id === userId) {
         setSelectedConversation(null);
@@ -246,28 +253,131 @@ export default function Chat() {
     }
   };
 
+  // --- Helper: Add Optimistic Message ---
+  const addOptimisticMessage = (content, type, fileName = null) => {
+    const tempId = `temp_${Date.now()}_${Math.random()}`;
+    const optimisticMsg = {
+      message_id: tempId,
+      conversation_id: selectedConversation.conversation_id,
+      sender_id: user.user_id,
+      content: content,
+      message_type: type,
+      file_name: fileName,
+      timestamp: new Date().toISOString(),
+      read_by: [user.user_id],
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    setConversations((prev) => {
+      const updated = prev.map((c) => {
+        if (c.conversation_id === selectedConversation.conversation_id) {
+          return {
+            ...c,
+            last_message: optimisticMsg,
+            updated_at: optimisticMsg.timestamp,
+          };
+        }
+        return c;
+      });
+      return updated.sort(
+        (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
+      );
+    });
+  };
+
+  // --- Voice Recording Functions ---
+  const startRecording = async () => {
+    if (!selectedConversation) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/webm",
+        });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = async () => {
+          const base64data = reader.result;
+
+          // 1. Show Instantly (Optimistic)
+          addOptimisticMessage(base64data, "audio/webm", "voice_message.webm");
+
+          try {
+            // 2. Upload to Server (Server broadcasts automatically)
+            await axios.post(
+              `${API}/conversations/${selectedConversation.conversation_id}/messages`,
+              {
+                content: base64data,
+                message_type: "audio/webm",
+                file_name: "voice_message.webm",
+              },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+          } catch (error) {
+            toast.error("Failed to send voice message");
+          }
+        };
+
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      toast.info("Recording started...");
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      toast.error("Microphone access denied or not available.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
   // --- Socket Listeners ---
   useEffect(() => {
     if (!socket) return;
     const handleNewMessage = (msg) => {
       const currentConv = selectedConversationRef.current;
 
+      // Handle dupes from optimistic updates
+      setMessages((prev) => {
+        if (prev.some((m) => m.message_id === msg.message_id)) return prev;
+        // If we have a temp message with matching content/timestamp, could dedupe here,
+        // but checking ID is safer. Optimistic messages stay until refresh or we can replace them.
+        // For simplicity in this prototype, we append.
+        return [...prev, msg];
+      });
+
       if (msg.sender_id !== user.user_id) {
         playNotificationSound();
-      }
-
-      if (currentConv && msg.conversation_id === currentConv.conversation_id) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.message_id === msg.message_id)) return prev;
-          return [...prev, msg];
-        });
-        socket.emit("message_read", {
-          message_id: msg.message_id,
-          conversation_id: msg.conversation_id,
-        });
+        if (
+          currentConv &&
+          msg.conversation_id === currentConv.conversation_id
+        ) {
+          socket.emit("message_read", {
+            message_id: msg.message_id,
+            conversation_id: msg.conversation_id,
+          });
+        }
       }
       fetchConversations();
     };
+
     const handleUserTyping = (data) => {
       const currentConv = selectedConversationRef.current;
       if (currentConv && data.conversation_id === currentConv.conversation_id) {
@@ -288,7 +398,7 @@ export default function Chat() {
         newSet.delete(data.user_id);
         return newSet;
       });
-    const handleError = (data) => toast.error(data.message); // Handle backend blocking error
+    const handleError = (data) => toast.error(data.message);
 
     socket.on("new_message", handleNewMessage);
     socket.on("user_typing", handleUserTyping);
@@ -329,7 +439,6 @@ export default function Chat() {
     )
       return;
 
-    // UI Block Check
     if (
       user.blocked_users?.includes(selectedConversation.other_user?.user_id)
     ) {
@@ -337,57 +446,32 @@ export default function Chat() {
       return;
     }
 
+    // 1. Text Message
     if (messageInput.trim()) {
-      const content = messageInput;
-      const tempId = `temp_${Date.now()}`;
-      const optimisticMsg = {
-        message_id: tempId,
-        conversation_id: selectedConversation.conversation_id,
-        sender_id: user.user_id,
-        content: content,
-        message_type: "text",
-        timestamp: new Date().toISOString(),
-        read_by: [user.user_id],
-      };
-      setMessages((prev) => [...prev, optimisticMsg]);
-      setConversations((prev) => {
-        const updated = prev.map((c) =>
-          c.conversation_id === selectedConversation.conversation_id
-            ? {
-                ...c,
-                last_message: optimisticMsg,
-                updated_at: optimisticMsg.timestamp,
-              }
-            : c
-        );
-        return updated.sort(
-          (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
-        );
-      });
+      addOptimisticMessage(messageInput, "text");
       socket?.emit("send_message", {
         conversation_id: selectedConversation.conversation_id,
-        content: content,
+        content: messageInput,
         message_type: "text",
       });
     }
+
+    // 2. Attachments
     for (const file of attachedFiles) {
+      addOptimisticMessage(file.data, file.type, file.name);
+
       try {
         await axios.post(
           `${API}/conversations/${selectedConversation.conversation_id}/messages`,
           { content: file.data, message_type: file.type, file_name: file.name },
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        socket?.emit("send_message", {
-          conversation_id: selectedConversation.conversation_id,
-          content: file.data,
-          message_type: file.type,
-          file_name: file.name,
-        });
-        fetchConversations();
+        // Note: No socket emit here; Server handles it now
       } catch (error) {
         toast.error(`Failed to send ${file.name}`);
       }
     }
+
     setMessageInput("");
     setAttachedFiles([]);
     setShowMediaUploader(false);
@@ -399,13 +483,20 @@ export default function Chat() {
       toast.error("Geolocation not supported");
       return;
     }
+    toast.info("Fetching location...");
     navigator.geolocation.getCurrentPosition(
-      (pos) =>
+      (pos) => {
+        const locationUrl = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+
+        // Optimistic Update
+        addOptimisticMessage(locationUrl, "location");
+
         socket?.emit("send_message", {
           conversation_id: selectedConversation.conversation_id,
-          content: `https://www.google.com/maps?q=$${pos.coords.latitude},${pos.coords.longitude}`,
+          content: locationUrl,
           message_type: "location",
-        }),
+        });
+      },
       () => toast.error("Unable to retrieve location")
     );
   };
@@ -424,7 +515,6 @@ export default function Chat() {
     }
   };
 
-  // Helper to check blocked status
   const isCurrentChatBlocked =
     selectedConversation &&
     user.blocked_users?.includes(selectedConversation.other_user?.user_id);
@@ -723,7 +813,9 @@ export default function Chat() {
               return (
                 <div
                   key={m.message_id}
-                  className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                  className={`flex ${
+                    isOwn ? "justify-end" : "justify-start"
+                  } animate-message-in`}
                 >
                   <div
                     className={`max-w-[75%] p-3 rounded-2xl ${
@@ -881,6 +973,22 @@ export default function Chat() {
                     >
                       <Settings size={20} />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      className={`${
+                        isRecording
+                          ? "text-destructive animate-pulse"
+                          : "text-muted-foreground hover:text-primary"
+                      }`}
+                    >
+                      {isRecording ? (
+                        <Square size={20} fill="currentColor" />
+                      ) : (
+                        <Mic size={20} />
+                      )}
+                    </Button>
                   </div>
                   <Input
                     value={messageInput}
@@ -891,12 +999,16 @@ export default function Chat() {
                       });
                     }}
                     onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                    placeholder={t("type_message")}
+                    placeholder={
+                      isRecording ? "Recording..." : t("type_message")
+                    }
                     className="flex-1 bg-muted border-border text-foreground rounded-full"
+                    disabled={isRecording}
                   />
                   <Button
                     onClick={sendMessage}
                     className="bg-primary hover:bg-primary/90 rounded-full w-10 h-10 p-0 flex items-center justify-center"
+                    disabled={isRecording}
                   >
                     <Send size={18} className="ml-1 text-primary-foreground" />
                   </Button>

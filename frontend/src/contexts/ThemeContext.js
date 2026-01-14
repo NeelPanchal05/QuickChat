@@ -4,40 +4,49 @@ const ThemeContext = createContext();
 
 export const useTheme = () => useContext(ThemeContext);
 
-// Added missing export
 export const THEME_PRESETS = [
   { id: "default", name: "Default Dark", style: { background: "#050505" } },
   {
-    id: "gradient-1",
+    id: "midnight",
     name: "Midnight",
     style: {
       background: "linear-gradient(to bottom right, #0f2027, #203a43, #2c5364)",
     },
   },
   {
-    id: "gradient-2",
+    id: "sunset",
     name: "Sunset",
     style: { background: "linear-gradient(to bottom right, #373B44, #4286f4)" },
   },
   {
-    id: "gradient-3",
+    id: "forest",
     name: "Forest",
     style: { background: "linear-gradient(to bottom right, #000000, #0f9b0f)" },
   },
   {
-    id: "gradient-4",
+    id: "royal",
     name: "Royal",
     style: { background: "linear-gradient(to bottom right, #141E30, #243B55)" },
   },
-  { id: "solid-1", name: "Pitch Black", style: { background: "#000000" } },
-  { id: "solid-2", name: "Dark Gray", style: { background: "#1a1a1a" } },
+  {
+    id: "fire",
+    name: "Fire",
+    style: { background: "linear-gradient(to bottom right, #480048, #C04848)" },
+  },
+  { id: "pitch", name: "Pitch Black", style: { background: "#000000" } },
+  { id: "gray", name: "Dark Gray", style: { background: "#1a1a1a" } },
 ];
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(
     localStorage.getItem("app_theme") || "dark"
   );
-  const [currentThemeData, setCurrentThemeData] = useState({});
+
+  // Load saved wallpaper or default
+  const [currentThemeData, setCurrentThemeData] = useState(() => {
+    const saved = localStorage.getItem("chat_wallpaper");
+    return saved ? JSON.parse(saved) : {};
+  });
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -52,6 +61,7 @@ export const ThemeProvider = ({ children }) => {
 
   const setChatBackground = (style) => {
     setCurrentThemeData({ bgStyle: style });
+    localStorage.setItem("chat_wallpaper", JSON.stringify({ bgStyle: style }));
   };
 
   return (

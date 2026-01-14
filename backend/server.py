@@ -394,7 +394,13 @@ async def save_attachment_message(
     await db.messages.insert_one(doc)
     await db.conversations.update_one({'conversation_id': conversation_id}, {'$set': {'updated_at': doc['timestamp']}})
     
-    doc['content'] = content 
+    # OPTIMIZATION: Broadcast immediately from server side
+    # This ensures the receiver gets it as soon as upload is done, without waiting for another client roundtrip
+    response_doc = doc.copy()
+    response_doc['content'] = content 
+    del response_doc['_id']
+    await sio.emit('new_message', response_doc, room=conversation_id)
+    
     return {k: v for k, v in doc.items() if k != '_id'}
 
 @app.put('/api/conversations/{conversation_id}/archive')
@@ -413,7 +419,6 @@ async def get_archived(current_user: dict = Depends(get_current_user)):
 
 @app.delete('/api/conversations/{conversation_id}')
 async def delete_conversation(conversation_id: str, current_user: dict = Depends(get_current_user)):
-    # Verify participant
     conv = await db.conversations.find_one({'conversation_id': conversation_id, 'participants': current_user['user_id']})
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -424,7 +429,6 @@ async def delete_conversation(conversation_id: str, current_user: dict = Depends
 
 @app.delete('/api/conversations/{conversation_id}/messages')
 async def clear_messages(conversation_id: str, current_user: dict = Depends(get_current_user)):
-    # Verify participant
     conv = await db.conversations.find_one({'conversation_id': conversation_id, 'participants': current_user['user_id']})
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -519,7 +523,6 @@ async def handle_message(sid, data):
         await sio.emit('error', {'message': reason}, to=sid)
         return
 
-    # Check Blocking Logic
     conversation_id = data.get('conversation_id')
     conversation = await db.conversations.find_one({'conversation_id': conversation_id})
     if not conversation:
