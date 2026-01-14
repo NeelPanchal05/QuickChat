@@ -1,94 +1,120 @@
-import React from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import React, { useRef } from "react";
 import { useTheme, THEME_PRESETS } from "@/contexts/ThemeContext";
-import { Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Upload, Check, Image as ImageIcon } from "lucide-react";
+import { toast } from "sonner";
 
-export default function ChatBackgroundSelector({ open, onOpenChange }) {
-  const { currentTheme, changeTheme } = useTheme();
+export default function ChatBackgroundSelector() {
+  const { setChatBackground, currentThemeData } = useTheme();
+  const fileInputRef = useRef(null);
+
+  const handlePresetClick = (preset) => {
+    setChatBackground(preset.style);
+    toast.success(`Wallpaper set to ${preset.name}`);
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image is too large (max 5MB)");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const style = {
+        backgroundImage: `url(${reader.result})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "fixed",
+      };
+      setChatBackground(style);
+      toast.success("Custom wallpaper set");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Helper to check if a preset is active
+  const isActive = (style) => {
+    return JSON.stringify(style) === JSON.stringify(currentThemeData?.bgStyle);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-black/95 border-white/10 text-white max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-white">
-            Choose Chat Background
-          </DialogTitle>
-          <DialogDescription className="text-[#A1A1AA]">
-            Select a theme to customize your chat experience
-          </DialogDescription>
-        </DialogHeader>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-2">
+        <h3 className="text-xl font-bold text-foreground">Chat Wallpaper</h3>
+        <p className="text-sm text-muted-foreground">
+          Select a preset or upload your own image.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 py-4">
-          {Object.entries(THEME_PRESETS).map(([key, theme]) => (
-            <button
-              key={key}
-              onClick={() => changeTheme(key)}
-              className="relative group cursor-pointer rounded-lg overflow-hidden"
+      {/* Custom Upload Section */}
+      <div className="w-full">
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          accept="image/png, image/jpeg, image/jpg, image/webp"
+          onChange={handleFileChange}
+        />
+        <Button
+          onClick={handleUploadClick}
+          variant="outline"
+          className="w-full h-20 border-dashed border-2 border-muted-foreground/25 hover:border-primary hover:bg-accent/50 flex flex-col items-center justify-center gap-2 transition-all"
+        >
+          <Upload size={24} className="text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">
+            Upload from Device
+          </span>
+        </Button>
+      </div>
+
+      {/* Presets Grid */}
+      <div>
+        <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+          <ImageIcon size={16} /> Presets
+        </h4>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+          {THEME_PRESETS.map((preset) => (
+            <div
+              key={preset.id}
+              onClick={() => handlePresetClick(preset)}
+              className={`
+                            cursor-pointer group relative aspect-video rounded-lg overflow-hidden border-2 transition-all
+                            ${
+                              isActive(preset.style)
+                                ? "border-primary ring-2 ring-primary/20"
+                                : "border-border hover:border-primary/50"
+                            }
+                        `}
             >
-              {/* Background Preview */}
-              <div
-                className="w-full h-24 transition-all group-hover:scale-105"
-                style={theme.bgStyle}
-              />
+              {/* Preview */}
+              <div className="w-full h-full" style={preset.style}></div>
 
-              {/* Overlay on Hover */}
-              <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors" />
+              {/* Label Overlay */}
+              <div className="absolute inset-x-0 bottom-0 bg-black/60 p-2 text-center backdrop-blur-sm">
+                <span className="text-[10px] font-medium text-white uppercase tracking-wide">
+                  {preset.name}
+                </span>
+              </div>
 
-              {/* Selected Indicator */}
-              {currentTheme === key && (
-                <div className="absolute inset-0 border-2 border-[#7000FF] flex items-center justify-center bg-black/30">
-                  <div className="bg-[#7000FF] rounded-full p-2">
-                    <Check size={16} className="text-white" />
-                  </div>
+              {/* Active Indicator */}
+              {isActive(preset.style) && (
+                <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1 shadow-lg">
+                  <Check size={12} strokeWidth={3} />
                 </div>
               )}
-
-              {/* Theme Name */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 translate-y-4 group-hover:translate-y-0 transition-transform">
-                <p className="text-white font-semibold text-sm">{theme.name}</p>
-                <p className="text-[#A1A1AA] text-xs">{theme.description}</p>
-              </div>
-            </button>
+            </div>
           ))}
         </div>
-
-        {/* Custom Color Picker */}
-        <div className="border-t border-white/10 pt-4">
-          <label className="text-sm font-semibold mb-2 block">
-            Custom Background Color
-          </label>
-          <div className="flex gap-2 items-center">
-            <input
-              type="color"
-              defaultValue="#050505"
-              onChange={(e) => {
-                // Add custom color theme dynamically
-                const customTheme = {
-                  name: "Custom",
-                  bgClass: `bg-[${e.target.value}]`,
-                  bgStyle: { background: e.target.value },
-                  bgImage: null,
-                  description: "Custom color",
-                };
-                // This would need to be handled in the main Chat component
-              }}
-              className="w-12 h-12 rounded-lg cursor-pointer"
-            />
-            <div className="flex-1">
-              <p className="text-sm text-[#A1A1AA]">
-                Pick any color for your background
-              </p>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
