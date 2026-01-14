@@ -374,15 +374,10 @@ async def save_attachment_message(
     file_name: str = Body(None),
     current_user: dict = Depends(get_current_user)
 ):
-    # This endpoint is for attachments which are too large for socket or need dedicated handling
-    # For now, we reuse the socket logic but via HTTP for reliability with files
-    
-    # 1. Spam Check
     is_spam, reason = spam_protection.check_spam(current_user['user_id'])
     if is_spam:
         raise HTTPException(status_code=429, detail=reason)
 
-    # 2. Encrypt
     encrypted_content = encrypt_message(content)
     
     msg_id = f"msg_{datetime.now(timezone.utc).timestamp()}".replace('.', '_')
@@ -399,7 +394,6 @@ async def save_attachment_message(
     await db.messages.insert_one(doc)
     await db.conversations.update_one({'conversation_id': conversation_id}, {'$set': {'updated_at': doc['timestamp']}})
     
-    # Return decrypted for frontend
     doc['content'] = content 
     return {k: v for k, v in doc.items() if k != '_id'}
 
@@ -419,9 +413,24 @@ async def get_archived(current_user: dict = Depends(get_current_user)):
 
 @app.delete('/api/conversations/{conversation_id}')
 async def delete_conversation(conversation_id: str, current_user: dict = Depends(get_current_user)):
+    # Verify participant
+    conv = await db.conversations.find_one({'conversation_id': conversation_id, 'participants': current_user['user_id']})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
     await db.conversations.delete_one({'conversation_id': conversation_id})
     await db.messages.delete_many({'conversation_id': conversation_id})
     return {'message': 'Deleted'}
+
+@app.delete('/api/conversations/{conversation_id}/messages')
+async def clear_messages(conversation_id: str, current_user: dict = Depends(get_current_user)):
+    # Verify participant
+    conv = await db.conversations.find_one({'conversation_id': conversation_id, 'participants': current_user['user_id']})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    await db.messages.delete_many({'conversation_id': conversation_id})
+    return {'message': 'Chat cleared'}
 
 @app.post('/api/conversations/{conversation_id}/pin')
 async def pin_conv(conversation_id: str, current_user: dict = Depends(get_current_user)):
@@ -451,7 +460,6 @@ async def create_poll(poll_data: Poll, current_user: dict = Depends(get_current_
 
 @app.post('/api/polls/{poll_id}/vote')
 async def vote_poll(poll_id: str, option_index: int, current_user: dict = Depends(get_current_user)):
-    # Simple voting logic: add user to array
     await db.polls.update_one(
         {'_id': poll_id},
         {'$addToSet': {f'options.{option_index}.votes': current_user['user_id']}}
@@ -506,7 +514,6 @@ async def handle_message(sid, data):
     if sid not in user_sockets: return
     user_id = user_sockets[sid]
     
-    # 1. Spam Protection
     is_spam, reason = spam_protection.check_spam(user_id)
     if is_spam:
         await sio.emit('error', {'message': reason}, to=sid)
@@ -514,13 +521,11 @@ async def handle_message(sid, data):
 
     content = data.get('content')
     
-    # 2. Content Filter
     spam_content, reason = is_spam_message(content)
     if spam_content:
         await sio.emit('error', {'message': reason}, to=sid)
         return
 
-    # 3. Encryption
     encrypted_content = encrypt_message(content)
     
     msg_id = f"msg_{datetime.now(timezone.utc).timestamp()}".replace('.', '_')
@@ -528,7 +533,7 @@ async def handle_message(sid, data):
         'message_id': msg_id,
         'conversation_id': data.get('conversation_id'),
         'sender_id': user_id,
-        'content': encrypted_content, # Store encrypted
+        'content': encrypted_content,
         'message_type': data.get('message_type', 'text'),
         'file_name': data.get('file_name'),
         'timestamp': datetime.now(timezone.utc).isoformat(),
@@ -541,9 +546,8 @@ async def handle_message(sid, data):
         {'$set': {'updated_at': doc['timestamp']}}
     )
     
-    # 4. Send Decrypted to Clients
     response_doc = doc.copy()
-    response_doc['content'] = content # Send plain text to active sockets
+    response_doc['content'] = content 
     del response_doc['_id']
     
     await sio.emit('new_message', response_doc, room=doc['conversation_id'])
@@ -568,7 +572,6 @@ async def handle_read(sid, data):
             'user_id': user_sockets[sid]
         }, room=data.get('conversation_id'))
 
-# WebRTC Signaling
 @sio.on('call_user')
 async def call_user(sid, data):
     if sid not in user_sockets: return
@@ -587,7 +590,6 @@ async def accept_call(sid, data):
             'callee_id': user_sockets[sid], 'signal': data.get('signal')
         }, room=active_users[data.get('caller_id')])
 
-# App wrap
 app_asgi = socketio.ASGIApp(sio, app)
 
 @app.on_event('shutdown')

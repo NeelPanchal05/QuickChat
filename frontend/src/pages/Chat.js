@@ -21,6 +21,9 @@ import {
   Calendar,
   UserPlus,
   X,
+  Trash2,
+  MoreVertical,
+  Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker from "emoji-picker-react";
@@ -47,6 +50,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Chat() {
   const { user, token, socket, logout, API } = useAuth();
@@ -83,12 +92,17 @@ export default function Chat() {
   const [showCall, setShowCall] = useState(false);
   const [callData, setCallData] = useState(null);
 
-  // Refs for stable state access inside listeners
+  // Refs
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const selectedConversationRef = useRef(selectedConversation);
 
-  // --- API Functions (Wrapped in useCallback to fix lint warnings) ---
+  // --- Sync Ref with State ---
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
+
+  // --- API Functions ---
   const fetchConversations = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/conversations`, {
@@ -172,10 +186,44 @@ export default function Chat() {
     }
   };
 
-  // --- Sync Ref with State ---
-  useEffect(() => {
-    selectedConversationRef.current = selectedConversation;
-  }, [selectedConversation]);
+  const deleteConversation = async (e, convId) => {
+    e.stopPropagation(); // Prevent opening the chat
+    if (!window.confirm("Are you sure you want to delete this conversation?"))
+      return;
+
+    try {
+      await axios.delete(`${API}/conversations/${convId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setConversations((prev) =>
+        prev.filter((c) => c.conversation_id !== convId)
+      );
+      if (selectedConversation?.conversation_id === convId) {
+        setSelectedConversation(null);
+      }
+      toast.success("Conversation deleted");
+    } catch (error) {
+      toast.error("Failed to delete conversation");
+    }
+  };
+
+  const clearChat = async () => {
+    if (!selectedConversation) return;
+    if (!window.confirm("Clear all messages in this chat?")) return;
+
+    try {
+      await axios.delete(
+        `${API}/conversations/${selectedConversation.conversation_id}/messages`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      setMessages([]);
+      toast.success("Chat cleared");
+    } catch (error) {
+      toast.error("Failed to clear chat");
+    }
+  };
 
   // --- Socket Listeners ---
   useEffect(() => {
@@ -185,13 +233,16 @@ export default function Chat() {
       const currentConv = selectedConversationRef.current;
 
       if (currentConv && msg.conversation_id === currentConv.conversation_id) {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev) => {
+          if (prev.some((m) => m.message_id === msg.message_id)) return prev;
+          return [...prev, msg];
+        });
+
         socket.emit("message_read", {
           message_id: msg.message_id,
           conversation_id: msg.conversation_id,
         });
       }
-      // fetchConversations is now a stable dependency due to useCallback
       fetchConversations();
     };
 
@@ -236,34 +287,25 @@ export default function Chat() {
     };
   }, [socket, fetchConversations]);
 
-  // --- Initial Load ---
+  // --- Conversation Logic ---
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
 
-  // --- Conversation Switching ---
   useEffect(() => {
-    if (selectedConversation) {
+    if (selectedConversation && socket) {
       fetchMessages(selectedConversation.conversation_id);
-      socket?.emit("join_conversation", {
+      socket.emit("join_conversation", {
         conversation_id: selectedConversation.conversation_id,
       });
     }
-    return () => {
-      if (selectedConversation) {
-        socket?.emit("leave_conversation", {
-          conversation_id: selectedConversation.conversation_id,
-        });
-      }
-    };
   }, [selectedConversation, fetchMessages, socket]);
 
-  // --- Auto Scroll ---
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // --- Messaging Functions ---
+  // --- Send Message ---
   const sendMessage = async () => {
     if (
       (!messageInput.trim() && attachedFiles.length === 0) ||
@@ -272,9 +314,40 @@ export default function Chat() {
       return;
 
     if (messageInput.trim()) {
+      const content = messageInput;
+      const tempId = `temp_${Date.now()}`;
+
+      const optimisticMsg = {
+        message_id: tempId,
+        conversation_id: selectedConversation.conversation_id,
+        sender_id: user.user_id,
+        content: content,
+        message_type: "text",
+        timestamp: new Date().toISOString(),
+        read_by: [user.user_id],
+      };
+
+      setMessages((prev) => [...prev, optimisticMsg]);
+
+      setConversations((prev) => {
+        const updated = prev.map((c) => {
+          if (c.conversation_id === selectedConversation.conversation_id) {
+            return {
+              ...c,
+              last_message: optimisticMsg,
+              updated_at: optimisticMsg.timestamp,
+            };
+          }
+          return c;
+        });
+        return updated.sort(
+          (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
+        );
+      });
+
       socket?.emit("send_message", {
         conversation_id: selectedConversation.conversation_id,
-        content: messageInput,
+        content: content,
         message_type: "text",
       });
     }
@@ -297,6 +370,7 @@ export default function Chat() {
           message_type: file.type,
           file_name: file.name,
         });
+        fetchConversations();
       } catch (error) {
         toast.error(`Failed to send ${file.name}`);
       }
@@ -423,7 +497,7 @@ export default function Chat() {
             <div
               key={c.conversation_id}
               onClick={() => setSelectedConversation(c)}
-              className={`p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors ${
+              className={`group p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors relative ${
                 selectedConversation?.conversation_id === c.conversation_id
                   ? "bg-white/10"
                   : ""
@@ -455,6 +529,15 @@ export default function Chat() {
                       : "Start chatting..."}
                   </p>
                 </div>
+                {/* Delete Button on Sidebar */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => deleteConversation(e, c.conversation_id)}
+                  className="opacity-0 group-hover:opacity-100 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-all h-8 w-8"
+                >
+                  <Trash2 size={16} />
+                </Button>
               </div>
             </div>
           ))}
@@ -506,7 +589,7 @@ export default function Chat() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-1 md:gap-2">
+            <div className="flex gap-1 md:gap-2 items-center">
               <Button
                 variant="ghost"
                 size="icon"
@@ -595,6 +678,31 @@ export default function Chat() {
               >
                 <Shield size={18} />
               </Button>
+
+              {/* Chat Options Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <MoreVertical size={18} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-48 bg-[#111] border-white/10 text-white"
+                >
+                  <DropdownMenuItem
+                    onClick={clearChat}
+                    className="text-red-400 focus:text-red-400 focus:bg-red-500/10 cursor-pointer"
+                  >
+                    <Eraser className="mr-2 h-4 w-4" />
+                    <span>Clear Chat</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
