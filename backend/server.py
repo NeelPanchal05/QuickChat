@@ -18,7 +18,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
-from bson import ObjectId
 
 # Import local modules
 from encryption import encrypt_message, decrypt_message
@@ -65,8 +64,8 @@ app.add_middleware(
 security = HTTPBearer()
 
 # In-memory storage
-active_users = {}
-user_sockets = {}
+active_users = {}  # {user_id: socket_id}
+user_sockets = {}  # {socket_id: user_id}
 
 # ==================== Models ====================
 
@@ -100,12 +99,6 @@ class ConversationCreate(BaseModel):
 class InviteFriend(BaseModel):
     email: EmailStr
 
-class Poll(BaseModel):
-    conversation_id: str
-    question: str
-    options: List[str]
-    allow_multiple: bool = False
-
 # ==================== Helper Functions ====================
 
 def generate_otp():
@@ -135,7 +128,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if not user:
             raise HTTPException(status_code=401, detail='User not found')
         
-        # Ensure blocked_users exists
         if 'blocked_users' not in user:
             user['blocked_users'] = []
             
@@ -240,7 +232,6 @@ async def login(data: UserLogin):
         raise HTTPException(status_code=401, detail='Invalid credentials')
     
     token = create_access_token({'sub': user['user_id']})
-    # Safe user object creation
     user_res = {k: v for k, v in user.items() if k not in ['_id', 'password_hash']}
     if 'blocked_users' not in user_res:
         user_res['blocked_users'] = []
@@ -472,44 +463,6 @@ async def unpin_conv(conversation_id: str, current_user: dict = Depends(get_curr
     await db.conversations.update_one({'conversation_id': conversation_id}, {'$pull': {'pinned_by': current_user['user_id']}})
     return {'message': 'Unpinned'}
 
-# ==================== Polls ====================
-
-@app.post('/api/polls')
-async def create_poll(poll_data: Poll, current_user: dict = Depends(get_current_user)):
-    poll = {
-        'conversation_id': poll_data.conversation_id,
-        'creator_id': current_user['user_id'],
-        'question': poll_data.question,
-        'options': [{'text': opt, 'votes': []} for opt in poll_data.options],
-        'allow_multiple': poll_data.allow_multiple,
-        'created_at': datetime.now(timezone.utc).isoformat()
-    }
-    res = await db.polls.insert_one(poll)
-    poll['_id'] = str(res.inserted_id)
-    return poll
-
-@app.get('/api/polls/{poll_id}')
-async def get_poll(poll_id: str, current_user: dict = Depends(get_current_user)):
-    try:
-        poll = await db.polls.find_one({'_id': ObjectId(poll_id)})
-        if not poll:
-            raise HTTPException(status_code=404, detail="Poll not found")
-        poll['_id'] = str(poll['_id'])
-        return poll
-    except:
-        raise HTTPException(status_code=400, detail="Invalid poll ID")
-
-@app.post('/api/polls/{poll_id}/vote')
-async def vote_poll(poll_id: str, option_index: int, current_user: dict = Depends(get_current_user)):
-    try:
-        await db.polls.update_one(
-            {'_id': ObjectId(poll_id)},
-            {'$addToSet': {f'options.{option_index}.votes': current_user['user_id']}}
-        )
-        return {'message': 'Voted'}
-    except:
-        raise HTTPException(status_code=400, detail="Vote failed")
-
 # ==================== Call History ====================
 
 @app.get('/api/calls/history')
@@ -572,18 +525,12 @@ async def handle_message(sid, data):
     other_id = next((p for p in conversation['participants'] if p != user_id), None)
     if other_id:
         recipient = await db.users.find_one({'user_id': other_id})
-        blocked_by_recipient = recipient.get('blocked_users', [])
-        if blocked_by_recipient is None: blocked_by_recipient = []
-        
-        if user_id in blocked_by_recipient:
+        if user_id in recipient.get('blocked_users', []):
             await sio.emit('error', {'message': 'You cannot send messages to this user.'}, to=sid)
             return
         
         sender = await db.users.find_one({'user_id': user_id})
-        blocked_by_sender = sender.get('blocked_users', [])
-        if blocked_by_sender is None: blocked_by_sender = []
-
-        if other_id in blocked_by_sender:
+        if other_id in sender.get('blocked_users', []):
             await sio.emit('error', {'message': 'You have blocked this user. Unblock to send messages.'}, to=sid)
             return
 

@@ -16,7 +16,6 @@ import {
   Send,
   Smile,
   Pin,
-  BarChart3,
   Shield,
   MapPin,
   Calendar,
@@ -38,8 +37,6 @@ import CallHistory from "@/components/CallHistory";
 import PrivacyManager from "@/components/PrivacyManager";
 import MediaUploader from "@/components/MediaUploader";
 import GifPicker from "@/components/GifPicker";
-import PollCreator from "@/components/PollCreator";
-import PollDisplay from "@/components/PollDisplay";
 import MessageReadStatus from "@/components/MessageReadStatus";
 import Profile from "@/pages/Profile";
 import TermsAndConditions from "@/pages/TermsAndConditions";
@@ -96,7 +93,6 @@ export default function Chat() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showMediaUploader, setShowMediaUploader] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
-  const [showPollCreator, setShowPollCreator] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
 
@@ -800,6 +796,10 @@ export default function Chat() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
             {messages.map((m) => {
               const isOwn = m.sender_id === user.user_id;
+
+              // Prevent Poll crashes
+              if (m.message_type === "poll") return null;
+
               return (
                 <div
                   key={m.message_id}
@@ -815,9 +815,6 @@ export default function Chat() {
                     }`}
                   >
                     {m.message_type === "text" && <p>{m.content}</p>}
-                    {m.message_type === "poll" && (
-                      <PollDisplay pollData={JSON.parse(m.content)} />
-                    )}
                     {m.message_type === "location" && (
                       <a
                         href={m.content}
@@ -945,14 +942,6 @@ export default function Chat() {
                     >
                       <MapPin size={20} />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowPollCreator(true)}
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <BarChart3 size={20} />
-                    </Button>
 
                     <Button
                       variant="ghost"
@@ -1060,33 +1049,6 @@ export default function Chat() {
               setShowGifPicker(false);
             }}
             onClose={() => setShowGifPicker(false)}
-          />
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showPollCreator} onOpenChange={setShowPollCreator}>
-        <DialogContent className="max-w-xl bg-card border-border">
-          <PollCreator
-            onClose={() => setShowPollCreator(false)}
-            onCreatePoll={async (poll) => {
-              try {
-                const res = await axios.post(
-                  `${API}/polls`,
-                  {
-                    conversation_id: selectedConversation.conversation_id,
-                    ...poll,
-                  },
-                  { headers: { Authorization: `Bearer ${token}` } }
-                );
-                socket?.emit("send_message", {
-                  conversation_id: selectedConversation.conversation_id,
-                  content: JSON.stringify(res.data),
-                  message_type: "poll",
-                });
-                setShowPollCreator(false);
-              } catch (e) {
-                toast.error("Failed to create poll");
-              }
-            }}
           />
         </DialogContent>
       </Dialog>
