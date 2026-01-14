@@ -1,259 +1,244 @@
 import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { X, Archive, AlertCircle, Check } from "lucide-react";
-import axios from "axios";
-import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
+import {
+  Shield,
+  Key,
+  Eye,
+  Trash2,
+  Lock,
+  Save,
+  AlertTriangle,
+} from "lucide-react";
+import axios from "axios";
 
-export default function PrivacyManager({ open, onOpenChange, conversations }) {
-  const { token, API } = useAuth();
-  const [blockedUsers, setBlockedUsers] = useState([]);
-  const [archivedChats, setArchivedChats] = useState([]);
+export default function PrivacyManager({ onClose }) {
+  const { user, token, API, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState("security"); // security | privacy | danger
+
+  // Security State
+  const [passData, setPassData] = useState({
+    old_password: "",
+    new_password: "",
+  });
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      fetchBlockedUsers();
-      fetchArchivedChats();
-    }
-  }, [open]);
+  // Privacy State
+  const [readReceipts, setReadReceipts] = useState(
+    JSON.parse(localStorage.getItem("privacy_read_receipts") ?? "true")
+  );
 
-  const fetchBlockedUsers = async () => {
+  // Handle Privacy Toggles
+  const toggleReadReceipts = (checked) => {
+    setReadReceipts(checked);
+    localStorage.setItem("privacy_read_receipts", JSON.stringify(checked));
+    toast.success(`Read receipts ${checked ? "enabled" : "disabled"}`);
+  };
+
+  // Handle Password Change
+  const handleChangePassword = async () => {
+    if (!passData.old_password || !passData.new_password) {
+      toast.error("Please fill in both fields");
+      return;
+    }
+    setLoading(true);
     try {
-      const response = await axios.get(`${API}/users/blocked`, {
+      await axios.post(`${API}/auth/change-password`, passData, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setBlockedUsers(response.data);
-    } catch (error) {
-      console.log("No blocked users or error fetching");
+      toast.success("Password changed successfully");
+      setPassData({ old_password: "", new_password: "" });
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to change password");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchArchivedChats = async () => {
+  // Handle Account Deletion
+  const handleDeleteAccount = async () => {
+    const confirm = window.prompt(
+      "Type 'DELETE' to confirm account deletion. This cannot be undone."
+    );
+    if (confirm !== "DELETE") return;
+
     try {
-      const response = await axios.get(`${API}/conversations/archived`, {
+      await axios.delete(`${API}/auth/delete-account`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setArchivedChats(response.data);
-    } catch (error) {
-      console.log("No archived chats or error fetching");
-    }
-  };
-
-  const blockUser = async (userId) => {
-    setLoading(true);
-    try {
-      await axios.post(
-        `${API}/users/block/${userId}`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("User blocked successfully");
-      fetchBlockedUsers();
-    } catch (error) {
-      toast.error("Failed to block user");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const unblockUser = async (userId) => {
-    setLoading(true);
-    try {
-      await axios.post(
-        `${API}/users/unblock/${userId}`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("User unblocked");
-      fetchBlockedUsers();
-    } catch (error) {
-      toast.error("Failed to unblock user");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const archiveChat = async (conversationId) => {
-    setLoading(true);
-    try {
-      await axios.put(
-        `${API}/conversations/${conversationId}/archive`,
-        { archived: true },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Chat archived");
-      fetchArchivedChats();
-    } catch (error) {
-      toast.error("Failed to archive chat");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const unarchiveChat = async (conversationId) => {
-    setLoading(true);
-    try {
-      await axios.put(
-        `${API}/conversations/${conversationId}/archive`,
-        { archived: false },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Chat unarchived");
-      fetchArchivedChats();
-    } catch (error) {
-      toast.error("Failed to unarchive chat");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteChat = async (conversationId) => {
-    if (
-      window.confirm(
-        "Are you sure you want to delete this chat? This action cannot be undone."
-      )
-    ) {
-      setLoading(true);
-      try {
-        await axios.delete(`${API}/conversations/${conversationId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        toast.success("Chat deleted");
-        fetchArchivedChats();
-      } catch (error) {
-        toast.error("Failed to delete chat");
-      } finally {
-        setLoading(false);
-      }
+      toast.success("Account deleted");
+      logout();
+    } catch (e) {
+      toast.error("Failed to delete account");
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-black/95 border-white/10 text-white max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-white">
-            Privacy & Archive Settings
-          </DialogTitle>
-          <DialogDescription className="text-[#A1A1AA]">
-            Manage blocked users and archived conversations
-          </DialogDescription>
-        </DialogHeader>
+    <div className="flex flex-col h-[500px] w-full text-foreground">
+      {/* Header */}
+      <div className="flex items-center gap-2 p-4 border-b border-border">
+        <Shield className="text-primary" size={24} />
+        <h2 className="text-xl font-bold">Privacy & Security</h2>
+      </div>
 
-        <Tabs defaultValue="blocked" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-black/40 border-white/10">
-            <TabsTrigger
-              value="blocked"
-              className="data-[state=active]:bg-[#7000FF] data-[state=active]:text-white"
-            >
-              <AlertCircle size={16} className="mr-2" />
-              Blocked Users
-            </TabsTrigger>
-            <TabsTrigger
-              value="archived"
-              className="data-[state=active]:bg-[#7000FF] data-[state=active]:text-white"
-            >
-              <Archive size={16} className="mr-2" />
-              Archived Chats
-            </TabsTrigger>
-          </TabsList>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <div className="w-1/3 border-r border-border p-2 space-y-1 bg-muted/30">
+          <Button
+            variant={activeTab === "security" ? "secondary" : "ghost"}
+            className="w-full justify-start gap-2"
+            onClick={() => setActiveTab("security")}
+          >
+            <Key size={16} /> Security
+          </Button>
+          <Button
+            variant={activeTab === "privacy" ? "secondary" : "ghost"}
+            className="w-full justify-start gap-2"
+            onClick={() => setActiveTab("privacy")}
+          >
+            <Eye size={16} /> Privacy
+          </Button>
+          <Button
+            variant={activeTab === "danger" ? "secondary" : "ghost"}
+            className="w-full justify-start gap-2 text-destructive hover:text-destructive"
+            onClick={() => setActiveTab("danger")}
+          >
+            <Trash2 size={16} /> Danger Zone
+          </Button>
+        </div>
 
-          {/* Blocked Users Tab */}
-          <TabsContent value="blocked" className="space-y-4">
-            {blockedUsers.length === 0 ? (
-              <div className="text-center py-8 text-[#A1A1AA]">
-                <Check size={32} className="mx-auto mb-2 text-[#7000FF]" />
-                <p>No blocked users</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {blockedUsers.map((user) => (
-                  <div
-                    key={user._id}
-                    className="flex items-center justify-between p-4 bg-black/40 border border-white/10 rounded-lg"
-                  >
-                    <div>
-                      <p className="font-semibold text-white">
-                        {user.real_name}
-                      </p>
-                      <p className="text-sm text-[#A1A1AA]">@{user.username}</p>
-                    </div>
-                    <Button
-                      onClick={() => unblockUser(user._id)}
-                      disabled={loading}
-                      size="sm"
-                      variant="outline"
-                      className="border-white/10 text-[#A1A1AA] hover:text-white"
-                    >
-                      Unblock
-                    </Button>
+        {/* Content */}
+        <div className="flex-1 p-6 overflow-y-auto">
+          {/* SECURITY TAB */}
+          {activeTab === "security" && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-medium mb-1">Change Password</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Update your password to keep your account secure.
+                </p>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">
+                      Current Password
+                    </label>
+                    <Input
+                      type="password"
+                      value={passData.old_password}
+                      onChange={(e) =>
+                        setPassData({
+                          ...passData,
+                          old_password: e.target.value,
+                        })
+                      }
+                      className="bg-muted border-border"
+                    />
                   </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Archived Chats Tab */}
-          <TabsContent value="archived" className="space-y-4">
-            {archivedChats.length === 0 ? (
-              <div className="text-center py-8 text-[#A1A1AA]">
-                <Archive size={32} className="mx-auto mb-2 text-[#7000FF]" />
-                <p>No archived chats</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {archivedChats.map((chat) => (
-                  <div
-                    key={chat._id}
-                    className="flex items-center justify-between p-4 bg-black/40 border border-white/10 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <p className="font-semibold text-white">
-                        {chat.participants[0]?.real_name || "Unknown User"}
-                      </p>
-                      <p className="text-sm text-[#A1A1AA]">
-                        {chat.messages?.[
-                          chat.messages.length - 1
-                        ]?.content?.substring(0, 40) || "No messages"}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => unarchiveChat(chat._id)}
-                        disabled={loading}
-                        size="sm"
-                        variant="outline"
-                        className="border-white/10 text-[#A1A1AA] hover:text-white"
-                      >
-                        Restore
-                      </Button>
-                      <Button
-                        onClick={() => deleteChat(chat._id)}
-                        disabled={loading}
-                        size="sm"
-                        className="bg-red-600/20 hover:bg-red-600/40 text-red-400"
-                      >
-                        Delete
-                      </Button>
-                    </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">New Password</label>
+                    <Input
+                      type="password"
+                      value={passData.new_password}
+                      onChange={(e) =>
+                        setPassData({
+                          ...passData,
+                          new_password: e.target.value,
+                        })
+                      }
+                      className="bg-muted border-border"
+                    />
                   </div>
-                ))}
+                  <Button
+                    onClick={handleChangePassword}
+                    disabled={loading}
+                    className="w-full bg-primary text-primary-foreground"
+                  >
+                    {loading ? "Updating..." : "Update Password"}
+                  </Button>
+                </div>
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+
+              <div className="pt-4 border-t border-border">
+                <div className="flex items-center gap-2 text-green-500 mb-2">
+                  <Lock size={16} />
+                  <span className="text-sm font-medium">
+                    End-to-End Encryption
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Your messages and calls are secured with end-to-end
+                  encryption. Only you and the person you're communicating with
+                  can read or listen to them.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* PRIVACY TAB */}
+          {activeTab === "privacy" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-medium">Read Receipts</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Allow others to see when you've read their messages.
+                  </p>
+                </div>
+                <Switch
+                  checked={readReceipts}
+                  onCheckedChange={toggleReadReceipts}
+                />
+              </div>
+
+              {/* Placeholder for future features */}
+              <div
+                className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border opacity-50 cursor-not-allowed"
+                title="Coming Soon"
+              >
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-medium">Online Status</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Show when you are active on QuickChat.
+                  </p>
+                </div>
+                <Switch checked={true} disabled />
+              </div>
+            </div>
+          )}
+
+          {/* DANGER ZONE TAB */}
+          {activeTab === "danger" && (
+            <div className="space-y-6">
+              <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg">
+                <div className="flex items-center gap-2 text-destructive mb-2">
+                  <AlertTriangle size={20} />
+                  <h3 className="font-bold">Delete Account</h3>
+                </div>
+                <p className="text-sm text-destructive/80 mb-4">
+                  Once you delete your account, there is no going back. Please
+                  be certain.
+                </p>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteAccount}
+                  className="w-full"
+                >
+                  Delete My Account
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 border-t border-border flex justify-end">
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+    </div>
   );
 }
