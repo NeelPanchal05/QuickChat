@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Body
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware  # <--- Make sure this is imported
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
@@ -18,6 +18,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+from bson import ObjectId
 
 # Import local modules
 from encryption import encrypt_message, decrypt_message
@@ -38,14 +39,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017') # Added default fallback
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'quickchat')] # Added default fallback
 
 # Socket.IO server
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins='*',
+    cors_allowed_origins=['http://localhost:3000', 'http://127.0.0.1:3000'], # Explicitly allow frontend
     ping_timeout=60,
     ping_interval=25
 )
@@ -53,13 +54,18 @@ sio = socketio.AsyncServer(
 # FastAPI app
 app = FastAPI()
 
+# --- FIX START: ADD CORS MIDDLEWARE ---
+# This tells the browser: "It is okay for localhost:3000 to talk to me"
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_origins=[origin.strip() for origin in os.environ.get('CORS_ORIGINS', '*').split(',')],
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=["*"],  # Allows all methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allows all headers
 )
+# --- FIX END ---
+
+# ... (Keep the rest of your server.py code below exactly as it was) ...
 
 security = HTTPBearer()
 

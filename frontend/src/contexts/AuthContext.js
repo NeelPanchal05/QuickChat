@@ -1,14 +1,17 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import axios from "axios";
-import { io } from "socket.io-client";
+import React, {
+  createContext,
+  useState,
+  useContext,
+  useEffect,
+  useCallback,
+} from "react";
+import io from "socket.io-client";
 
 const AuthContext = createContext(null);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within AuthProvider");
-  return context;
-};
+// Ensure this matches your backend port
+const BACKEND_URL = "http://localhost:8000";
+const API = process.env.REACT_APP_BACKEND_URL || BACKEND_URL;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -16,132 +19,133 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
 
-  const BACKEND_URL =
-    process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-  const API = `${BACKEND_URL}/api`;
+  // 1. Define logout first using useCallback so it's stable
+  const logout = useCallback(() => {
+    localStorage.removeItem("token");
+    setToken(null);
+    setUser(null);
+    // Socket disconnection is automatically handled by the useEffect cleanup below when token becomes null
+  }, []);
 
-  // --- Socket Connection ---
+  // 2. Define fetchUser using useCallback (depends on logout)
+  const fetchUser = useCallback(
+    async (currentToken) => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+          },
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+        } else {
+          // If token is invalid, clear it
+          logout();
+        }
+      } catch (error) {
+        console.error("Error fetching user:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [logout]
+  ); // Safe dependency
+
+  // Initialize Socket.IO
   useEffect(() => {
     if (token) {
       const newSocket = io(BACKEND_URL, {
         auth: { token },
         transports: ["websocket", "polling"],
+        withCredentials: true,
       });
 
       newSocket.on("connect", () => {
         console.log("Socket connected:", newSocket.id);
       });
 
-      newSocket.on("disconnect", () => {
-        console.log("Socket disconnected");
+      newSocket.on("connect_error", (err) => {
+        console.error("Socket connection error:", err);
       });
 
       setSocket(newSocket);
 
-      return () => {
-        newSocket.close();
-      };
+      // Cleanup function: Disconnects socket when component unmounts OR when token changes (e.g., logout)
+      return () => newSocket.disconnect();
     }
-  }, [token, BACKEND_URL]);
-
-  // --- Initial Load User ---
-  useEffect(() => {
-    const initAuth = async () => {
-      if (token && !user) {
-        await fetchUser(token);
-      } else {
-        setLoading(false);
-      }
-    };
-    initAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const fetchUser = async (accessToken = token) => {
-    if (!accessToken) return;
-    try {
-      const response = await axios.get(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      setUser(response.data);
-    } catch (error) {
-      console.error("Failed to fetch user:", error);
-      logout();
-    } finally {
+  // Check auth on load
+  useEffect(() => {
+    if (token) {
+      fetchUser(token);
+    } else {
       setLoading(false);
     }
-  };
+  }, [token, fetchUser]); // <--- dependency warning resolved!
 
-  const login = async (loginData, password) => {
-    setLoading(true);
+  const login = async (loginIdentifier, password) => {
     try {
-      const response = await axios.post(`${API}/auth/login`, {
-        login: loginData,
-        password,
+      const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login: loginIdentifier, password }),
       });
 
-      const { token: newToken } = response.data;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Login failed");
 
-      // 1. Save Token
-      localStorage.setItem("token", newToken);
-      setToken(newToken);
+      localStorage.setItem("token", data.token);
+      setToken(data.token);
 
-      // 2. FORCE fetch full user profile before finishing
-      // This ensures 'user' has the exact same structure as a page reload
-      await fetchUser(newToken);
-
-      return response.data;
-    } catch (error) {
-      setLoading(false); // Stop loading on error
-      throw error;
+      // Fetch user immediately
+      await fetchUser(data.token);
+      return data;
+    } catch (err) {
+      console.error("Login error:", err);
+      throw err;
     }
   };
 
-  const register = async (registerData) => {
+  const register = async (userData) => {
     try {
-      console.log("Calling register API with URL:", `${API}/auth/register`);
-      const response = await axios.post(`${API}/auth/register`, registerData);
-      console.log("Register API response:", response.data);
-      return response.data;
-    } catch (error) {
-      console.error("Register API error:", error);
-      throw error;
+      const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(userData),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Registration failed");
+      return data;
+    } catch (err) {
+      console.error("Registration error:", err);
+      throw err;
     }
   };
 
   const verifyOtp = async (email, otp) => {
-    setLoading(true);
     try {
-      const response = await axios.post(`${API}/auth/verify-otp`, {
-        email,
-        otp,
+      const res = await fetch(`${BACKEND_URL}/api/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp }),
       });
 
-      const { token: newToken } = response.data;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "OTP verification failed");
 
-      // 1. Save Token
-      localStorage.setItem("token", newToken);
-      setToken(newToken);
+      localStorage.setItem("token", data.token);
+      setToken(data.token);
 
-      // 2. FORCE fetch full user profile
-      await fetchUser(newToken);
-
-      return response.data;
-    } catch (error) {
-      setLoading(false); // Stop loading on error
-      throw error;
+      await fetchUser(data.token);
+      return data;
+    } catch (err) {
+      console.error("OTP Error:", err);
+      throw err;
     }
-  };
-
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem("token");
-    if (socket) {
-      socket.close();
-      setSocket(null);
-    }
-    setLoading(false);
   };
 
   return (
@@ -149,18 +153,19 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         token,
-        loading,
-        socket,
         login,
         register,
         verifyOtp,
         logout,
+        loading,
+        socket,
         fetchUser,
         API,
-        BACKEND_URL,
       }}
     >
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };
+
+export const useAuth = () => useContext(AuthContext);
