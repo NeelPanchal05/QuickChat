@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import Peer from 'simple-peer';
-import { Button } from '@/components/ui/button';
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from 'lucide-react';
-import { toast } from 'sonner';
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import Peer from "simple-peer";
+import { Button } from "@/components/ui/button";
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { toast } from "sonner";
 
 export default function CallModal({ callData, socket, userId, onClose }) {
   const [stream, setStream] = useState(null);
@@ -15,37 +15,58 @@ export default function CallModal({ callData, socket, userId, onClose }) {
   const peerRef = useRef(null);
   const { callType, otherUser, incoming, caller, signal } = callData;
 
-  useEffect(() => {
-    if (!incoming) {
-      startCall();
+  const cleanupCall = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
     }
+    if (peerRef.current) {
+      peerRef.current.destroy();
+    }
+  }, [stream]);
 
-    socket.on('call_accepted', handleCallAccepted);
-    socket.on('call_rejected', handleCallRejected);
-    socket.on('call_ended', handleCallEnded);
-    socket.on('ice_candidate', handleIceCandidate);
+  const endCall = useCallback(() => {
+    socket.emit("end_call", {
+      other_user_id: incoming ? caller.user_id : otherUser.user_id,
+    });
+    cleanupCall();
+    onClose();
+  }, [incoming, caller, otherUser, socket, cleanupCall, onClose]);
 
-    return () => {
-      cleanupCall();
-      socket.off('call_accepted', handleCallAccepted);
-      socket.off('call_rejected', handleCallRejected);
-      socket.off('call_ended', handleCallEnded);
-      socket.off('ice_candidate', handleIceCandidate);
-    };
+  const handleCallAccepted = useCallback((data) => {
+    if (peerRef.current) {
+      peerRef.current.signal(data.signal);
+    }
   }, []);
 
-  const startCall = async () => {
+  const handleCallRejected = useCallback(() => {
+    toast.info("Call rejected");
+    onClose();
+  }, [onClose]);
+
+  const handleCallEnded = useCallback(() => {
+    toast.info("Call ended");
+    onClose();
+  }, [onClose]);
+
+  const handleIceCandidate = useCallback((data) => {
+    // Handle ICE candidates if needed
+  }, []);
+
+  const startCall = useCallback(async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: callType === 'video' ? {
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } : false,
+        video:
+          callType === "video"
+            ? {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              }
+            : false,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
-        }
+          autoGainControl: true,
+        },
       });
 
       setStream(mediaStream);
@@ -59,21 +80,21 @@ export default function CallModal({ callData, socket, userId, onClose }) {
         stream: mediaStream,
         config: {
           iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        }
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+          ],
+        },
       });
 
-      peer.on('signal', (data) => {
-        socket.emit('call_user', {
+      peer.on("signal", (data) => {
+        socket.emit("call_user", {
           callee_id: otherUser.user_id,
           signal: data,
-          call_type: callType
+          call_type: callType,
         });
       });
 
-      peer.on('stream', (remoteStream) => {
+      peer.on("stream", (remoteStream) => {
         setRemoteStream(remoteStream);
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStream;
@@ -81,32 +102,63 @@ export default function CallModal({ callData, socket, userId, onClose }) {
         setCallActive(true);
       });
 
-      peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        toast.error('Call connection failed');
+      peer.on("error", (err) => {
+        console.error("Peer error:", err);
+        toast.error("Call connection failed");
         endCall();
       });
 
       peerRef.current = peer;
     } catch (error) {
-      console.error('Failed to start call:', error);
-      toast.error('Failed to access camera/microphone');
+      console.error("Failed to start call:", error);
+      toast.error("Failed to access camera/microphone");
       onClose();
     }
-  };
+  }, [callType, otherUser, socket, onClose]);
+
+  useEffect(() => {
+    if (!incoming) {
+      startCall();
+    }
+
+    socket.on("call_accepted", handleCallAccepted);
+    socket.on("call_rejected", handleCallRejected);
+    socket.on("call_ended", handleCallEnded);
+    socket.on("ice_candidate", handleIceCandidate);
+
+    return () => {
+      cleanupCall();
+      socket.off("call_accepted", handleCallAccepted);
+      socket.off("call_rejected", handleCallRejected);
+      socket.off("call_ended", handleCallEnded);
+      socket.off("ice_candidate", handleIceCandidate);
+    };
+  }, [
+    incoming,
+    startCall,
+    handleCallAccepted,
+    handleCallRejected,
+    handleCallEnded,
+    handleIceCandidate,
+    socket,
+    cleanupCall,
+  ]);
 
   const acceptCall = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: callType === 'video' ? {
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } : false,
+        video:
+          callType === "video"
+            ? {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              }
+            : false,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
-        }
+          autoGainControl: true,
+        },
       });
 
       setStream(mediaStream);
@@ -120,20 +172,20 @@ export default function CallModal({ callData, socket, userId, onClose }) {
         stream: mediaStream,
         config: {
           iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        }
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+          ],
+        },
       });
 
-      peer.on('signal', (data) => {
-        socket.emit('accept_call', {
+      peer.on("signal", (data) => {
+        socket.emit("accept_call", {
           caller_id: caller.user_id,
-          signal: data
+          signal: data,
         });
       });
 
-      peer.on('stream', (remoteStream) => {
+      peer.on("stream", (remoteStream) => {
         setRemoteStream(remoteStream);
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStream;
@@ -141,64 +193,29 @@ export default function CallModal({ callData, socket, userId, onClose }) {
         setCallActive(true);
       });
 
-      peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        toast.error('Call connection failed');
+      peer.on("error", (err) => {
+        console.error("Peer error:", err);
+        toast.error("Call connection failed");
         endCall();
       });
 
       peer.signal(signal);
       peerRef.current = peer;
     } catch (error) {
-      console.error('Failed to accept call:', error);
-      toast.error('Failed to access camera/microphone');
+      console.error("Failed to accept call:", error);
+      toast.error("Failed to access camera/microphone");
       rejectCall();
     }
   };
 
-  const handleCallAccepted = (data) => {
-    if (peerRef.current) {
-      peerRef.current.signal(data.signal);
-    }
-  };
-
-  const handleCallRejected = () => {
-    toast.info('Call rejected');
-    onClose();
-  };
-
-  const handleCallEnded = () => {
-    toast.info('Call ended');
-    onClose();
-  };
-
-  const handleIceCandidate = (data) => {
-    // Handle ICE candidates if needed
-  };
-
   const rejectCall = () => {
-    socket.emit('reject_call', { caller_id: caller.user_id });
+    socket.emit("reject_call", { caller_id: caller.user_id });
     onClose();
-  };
-
-  const endCall = () => {
-    socket.emit('end_call', { other_user_id: incoming ? caller.user_id : otherUser.user_id });
-    cleanupCall();
-    onClose();
-  };
-
-  const cleanupCall = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-    if (peerRef.current) {
-      peerRef.current.destroy();
-    }
   };
 
   const toggleMute = () => {
     if (stream) {
-      stream.getAudioTracks().forEach(track => {
+      stream.getAudioTracks().forEach((track) => {
         track.enabled = !track.enabled;
       });
       setIsMuted(!isMuted);
@@ -206,8 +223,8 @@ export default function CallModal({ callData, socket, userId, onClose }) {
   };
 
   const toggleVideo = () => {
-    if (stream && callType === 'video') {
-      stream.getVideoTracks().forEach(track => {
+    if (stream && callType === "video") {
+      stream.getVideoTracks().forEach((track) => {
         track.enabled = !track.enabled;
       });
       setIsVideoOff(!isVideoOff);
@@ -223,10 +240,16 @@ export default function CallModal({ callData, socket, userId, onClose }) {
         <div className="p-4 backdrop-blur-xl bg-black/50 border-b border-white/5">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-xl font-semibold text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                {incoming ? 'Incoming' : 'Outgoing'} {callType === 'video' ? 'Video' : 'Voice'} Call
+              <h3
+                className="text-xl font-semibold text-white"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {incoming ? "Incoming" : "Outgoing"}{" "}
+                {callType === "video" ? "Video" : "Voice"} Call
               </h3>
-              <p className="text-[#A1A1AA]">{displayUser?.real_name || displayUser?.username}</p>
+              <p className="text-[#A1A1AA]">
+                {displayUser?.real_name || displayUser?.username}
+              </p>
             </div>
             {!callActive && incoming && (
               <div className="flex gap-2">
@@ -253,7 +276,7 @@ export default function CallModal({ callData, socket, userId, onClose }) {
 
         {/* Video Area */}
         <div className="flex-1 relative bg-black">
-          {callType === 'video' ? (
+          {callType === "video" ? (
             <>
               {/* Remote Video */}
               <video
@@ -282,9 +305,15 @@ export default function CallModal({ callData, socket, userId, onClose }) {
                 <div className="w-32 h-32 bg-[#7000FF]/20 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Phone className="h-16 w-16 text-[#7000FF]" />
                 </div>
-                <p className="text-2xl font-semibold text-white">{displayUser?.real_name}</p>
+                <p className="text-2xl font-semibold text-white">
+                  {displayUser?.real_name}
+                </p>
                 <p className="text-[#A1A1AA] mt-2">
-                  {callActive ? 'Call in progress...' : incoming ? 'Incoming call...' : 'Calling...'}
+                  {callActive
+                    ? "Call in progress..."
+                    : incoming
+                    ? "Incoming call..."
+                    : "Calling..."}
                 </p>
               </div>
             </div>
@@ -297,27 +326,27 @@ export default function CallModal({ callData, socket, userId, onClose }) {
             <Button
               onClick={toggleMute}
               data-testid="mute-button"
-              variant={isMuted ? 'destructive' : 'default'}
+              variant={isMuted ? "destructive" : "default"}
               size="icon"
               className={`w-14 h-14 rounded-full ${
                 isMuted
-                  ? 'bg-[#EF4444] hover:bg-[#DC2626]'
-                  : 'bg-white/10 hover:bg-white/20'
+                  ? "bg-[#EF4444] hover:bg-[#DC2626]"
+                  : "bg-white/10 hover:bg-white/20"
               }`}
             >
               {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
             </Button>
 
-            {callType === 'video' && (
+            {callType === "video" && (
               <Button
                 onClick={toggleVideo}
                 data-testid="video-toggle-button"
-                variant={isVideoOff ? 'destructive' : 'default'}
+                variant={isVideoOff ? "destructive" : "default"}
                 size="icon"
                 className={`w-14 h-14 rounded-full ${
                   isVideoOff
-                    ? 'bg-[#EF4444] hover:bg-[#DC2626]'
-                    : 'bg-white/10 hover:bg-white/20'
+                    ? "bg-[#EF4444] hover:bg-[#DC2626]"
+                    : "bg-white/10 hover:bg-white/20"
                 }`}
               >
                 {isVideoOff ? <VideoOff size={24} /> : <Video size={24} />}

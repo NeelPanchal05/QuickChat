@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,13 +17,7 @@ export default function CallHistory({ open, onOpenChange }) {
   const [callHistory, setCallHistory] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      fetchCallHistory();
-    }
-  }, [open]);
-
-  const fetchCallHistory = async () => {
+  const fetchCallHistory = useCallback(async () => {
     setLoading(true);
     try {
       const response = await axios.get(`${API}/calls/history`, {
@@ -35,7 +29,13 @@ export default function CallHistory({ open, onOpenChange }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API, token]);
+
+  useEffect(() => {
+    if (open) {
+      fetchCallHistory();
+    }
+  }, [open, fetchCallHistory]);
 
   const deleteCall = async (callId) => {
     try {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,12 +38,7 @@ export default function PrivacyManager({ onClose }) {
   // Archive State
   const [archivedChats, setArchivedChats] = useState([]);
 
-  useEffect(() => {
-    fetchBlockedUsers();
-    fetchArchivedChats();
-  }, []);
-
-  const fetchBlockedUsers = async () => {
+  const fetchBlockedUsers = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/users/blocked`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -52,9 +47,9 @@ export default function PrivacyManager({ onClose }) {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [API, token]);
 
-  const fetchArchivedChats = async () => {
+  const fetchArchivedChats = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/conversations/archived`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -63,7 +58,12 @@ export default function PrivacyManager({ onClose }) {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [API, token]);
+
+  useEffect(() => {
+    fetchBlockedUsers();
+    fetchArchivedChats();
+  }, [fetchBlockedUsers, fetchArchivedChats]);
 
   const toggleReadReceipts = (checked) => {
     setReadReceipts(checked);
