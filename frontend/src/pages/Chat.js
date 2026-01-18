@@ -496,7 +496,8 @@ export default function Chat() {
   const startCall = (callType) => {
     if (selectedConversation) {
       setCallData({
-        callType,
+        call_type: callType, // Changed from callType to call_type
+        callType: callType,  // Keep both for compatibility
         otherUser: selectedConversation.other_user,
         incoming: false,
       });

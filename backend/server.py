@@ -611,6 +611,18 @@ async def accept_call(sid, data):
             'callee_id': user_sockets[sid], 'signal': data.get('signal')
         }, room=active_users[data.get('caller_id')])
 
+@sio.on('reject_call')
+async def reject_call(sid, data):
+    if data.get('caller_id') in active_users:
+        await sio.emit('call_rejected', {}, room=active_users[data.get('caller_id')])
+
+@sio.on('end_call')
+async def end_call(sid, data):
+    if sid not in user_sockets: return
+    other_user_id = data.get('other_user_id')
+    if other_user_id in active_users:
+        await sio.emit('call_ended', {}, room=active_users[other_user_id])
+
 app_asgi = socketio.ASGIApp(sio, app)
 
 @app.on_event('shutdown')

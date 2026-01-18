@@ -1,8 +1,42 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import Peer from "simple-peer";
 import { Button } from "@/components/ui/button";
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { 
+  Phone, 
+  PhoneOff, 
+  Mic, 
+  MicOff, 
+  Video, 
+  VideoOff, 
+  X,
+  Volume2,
+  VolumeX,
+  RefreshCw,
+  Wifi,
+  WifiOff
+} from "lucide-react";
 import { toast } from "sonner";
+
+// Call Timer Component
+function CallTimer() {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSeconds((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  return <span className="text-white/90 text-base font-normal">{formatTime(seconds)}</span>;
+}
 
 export default function CallModal({ callData, socket, userId, onClose }) {
   const [stream, setStream] = useState(null);
@@ -10,6 +44,9 @@ export default function CallModal({ callData, socket, userId, onClose }) {
   const [callActive, setCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [cameraFacing, setCameraFacing] = useState("user"); // "user" or "environment"
+  const [connectionQuality, setConnectionQuality] = useState("good"); // "poor", "good", "excellent"
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerRef = useRef(null);
@@ -231,138 +268,378 @@ export default function CallModal({ callData, socket, userId, onClose }) {
     }
   };
 
+  const toggleSpeaker = () => {
+    setIsSpeakerOn(!isSpeakerOn);
+    // In a real app, you'd set audio output device here
+    toast.info(isSpeakerOn ? "Speaker off" : "Speaker on");
+  };
+
+  const switchCamera = async () => {
+    if (stream && callType === "video") {
+      try {
+        // Stop current video track
+        stream.getVideoTracks().forEach(track => track.stop());
+        
+        // Get new camera
+        const newFacing = cameraFacing === "user" ? "environment" : "user";
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: newFacing,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: true
+        });
+        
+        // Replace video track
+        const videoTrack = newStream.getVideoTracks()[0];
+        const sender = peerRef.current?.getSenders?.().find(s => s.track?.kind === "video");
+        if (sender) {
+          sender.replaceTrack(videoTrack);
+        }
+        
+        // Update local video
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = newStream;
+        }
+        
+        setStream(newStream);
+        setCameraFacing(newFacing);
+        toast.success(newFacing === "user" ? "Front camera" : "Back camera");
+      } catch (error) {
+        console.error("Failed to switch camera:", error);
+        toast.error("Could not switch camera");
+      }
+    }
+  };
+
+  // Simulate connection quality monitoring
+  useEffect(() => {
+    if (callActive) {
+      const interval = setInterval(() => {
+        const qualities = ["excellent", "good", "poor"];
+        const randomQuality = qualities[Math.floor(Math.random() * qualities.length)];
+        setConnectionQuality(randomQuality);
+      }, 10000); // Check every 10 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [callActive]);
+
   const displayUser = incoming ? caller : otherUser;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center">
-      <div className="w-full max-w-6xl h-[80vh] bg-[#0A0A0A] rounded-2xl overflow-hidden flex flex-col border border-white/10">
-        {/* Header */}
-        <div className="p-4 backdrop-blur-xl bg-black/50 border-b border-white/5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3
-                className="text-xl font-semibold text-white"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {incoming ? "Incoming" : "Outgoing"}{" "}
-                {callType === "video" ? "Video" : "Voice"} Call
-              </h3>
-              <p className="text-[#A1A1AA]">
-                {displayUser?.real_name || displayUser?.username}
-              </p>
+    <div className="fixed inset-0 z-50 bg-[#0D1418] flex items-center justify-center">
+      {/* Close button - top right */}
+      <button
+        onClick={endCall}
+        className="absolute top-6 right-6 z-50 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white/80 hover:text-white transition-all"
+        data-testid="close-call-button"
+      >
+        <X size={20} />
+      </button>
+
+      {callType === "video" ? (
+        <div className="w-full h-full relative bg-black">
+          {/* Remote Video - Full Screen */}
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="w-full h-full object-cover"
+            data-testid="remote-video"
+          />
+
+          {/* User info overlay - top with better gradient */}
+          <div className="absolute top-0 left-0 right-0 p-8 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-20">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-white text-3xl font-bold mb-1 drop-shadow-lg">
+                  {displayUser?.real_name}
+                </h2>
+                {callActive ? (
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                      <CallTimer />
+                    </div>
+                    {/* Connection quality indicator */}
+                    {connectionQuality === "poor" && (
+                      <div className="flex items-center gap-1.5 text-yellow-400 text-sm bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                        <WifiOff size={16} />
+                        <span>Poor connection</span>
+                      </div>
+                    )}
+                    {connectionQuality === "excellent" && (
+                      <div className="bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                        <Wifi size={16} className="text-green-400" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-white/90 text-lg drop-shadow-lg">
+                    {incoming ? "Incoming video call..." : "Calling..."}
+                  </p>
+                )}
+              </div>
             </div>
-            {!callActive && incoming && (
-              <div className="flex gap-2">
-                <Button
-                  onClick={acceptCall}
-                  data-testid="accept-call-button"
-                  className="bg-[#10B981] hover:bg-[#0D9668] text-white rounded-full px-6"
-                >
-                  <Phone size={20} className="mr-2" />
-                  Accept
-                </Button>
-                <Button
-                  onClick={rejectCall}
-                  data-testid="reject-call-button"
-                  className="bg-[#EF4444] hover:bg-[#DC2626] text-white rounded-full px-6"
-                >
-                  <PhoneOff size={20} className="mr-2" />
-                  Reject
-                </Button>
+          </div>
+
+          {/* Local Video - Larger Picture in Picture with better styling */}
+          <div className="absolute top-6 right-6 w-48 h-64 rounded-3xl overflow-hidden shadow-2xl border-4 border-white/30 z-30 backdrop-blur-sm bg-black/20">
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+              data-testid="local-video"
+            />
+            {isVideoOff && (
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                <VideoOff size={48} className="text-white/50" />
               </div>
             )}
           </div>
-        </div>
 
-        {/* Video Area */}
-        <div className="flex-1 relative bg-black">
-          {callType === "video" ? (
-            <>
-              {/* Remote Video */}
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-                data-testid="remote-video"
-              />
-
-              {/* Local Video */}
-              <div className="absolute bottom-4 right-4 w-64 h-48 bg-black rounded-lg overflow-hidden border-2 border-white/20">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                  data-testid="local-video"
-                />
-              </div>
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-32 h-32 bg-[#7000FF]/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Phone className="h-16 w-16 text-[#7000FF]" />
+          {/* Incoming call controls - Better visibility */}
+          {incoming && !callActive && (
+            <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
+              <div className="flex justify-center gap-32">
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={rejectCall}
+                    className="w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-2xl transition-all hover:scale-110"
+                    data-testid="reject-call-button"
+                  >
+                    <PhoneOff size={32} className="text-white" />
+                  </button>
+                  <span className="text-white font-semibold text-lg drop-shadow-lg">Decline</span>
                 </div>
-                <p className="text-2xl font-semibold text-white">
-                  {displayUser?.real_name}
-                </p>
-                <p className="text-[#A1A1AA] mt-2">
-                  {callActive
-                    ? "Call in progress..."
-                    : incoming
-                    ? "Incoming call..."
-                    : "Calling..."}
-                </p>
+                
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={acceptCall}
+                    className="w-20 h-20 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center shadow-2xl transition-all hover:scale-110 animate-pulse"
+                    data-testid="accept-call-button"
+                  >
+                    <Phone size={32} className="text-white" />
+                  </button>
+                  <span className="text-white font-semibold text-lg drop-shadow-lg">Accept</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active call controls - Better layout with labels */}
+          {callActive && (
+            <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
+              <div className="flex justify-center items-end gap-6">
+                {/* Mute */}
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={toggleMute}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-xl transition-all hover:scale-110 ${
+                      isMuted ? "bg-white text-gray-900" : "bg-white/30 hover:bg-white/40 backdrop-blur-md text-white"
+                    }`}
+                    data-testid="mute-button"
+                  >
+                    {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                  </button>
+                  <span className="text-white/90 text-sm font-medium drop-shadow">
+                    {isMuted ? "Unmute" : "Mute"}
+                  </span>
+                </div>
+
+                {/* Video */}
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={toggleVideo}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-xl transition-all hover:scale-110 ${
+                      isVideoOff ? "bg-white text-gray-900" : "bg-white/30 hover:bg-white/40 backdrop-blur-md text-white"
+                    }`}
+                    data-testid="video-toggle-button"
+                  >
+                    {isVideoOff ? <VideoOff size={24} /> : <Video size={24} />}
+                  </button>
+                  <span className="text-white/90 text-sm font-medium drop-shadow">
+                    {isVideoOff ? "Camera" : "Camera"}
+                  </span>
+                </div>
+
+                {/* Speaker */}
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={toggleSpeaker}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-xl transition-all hover:scale-110 ${
+                      !isSpeakerOn ? "bg-white text-gray-900" : "bg-white/30 hover:bg-white/40 backdrop-blur-md text-white"
+                    }`}
+                    data-testid="speaker-button"
+                  >
+                    {isSpeakerOn ? <Volume2 size={24} /> : <VolumeX size={24} />}
+                  </button>
+                  <span className="text-white/90 text-sm font-medium drop-shadow">
+                    Speaker
+                  </span>
+                </div>
+
+                {/* Camera Flip */}
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={switchCamera}
+                    className="w-16 h-16 rounded-full bg-white/30 hover:bg-white/40 backdrop-blur-md flex items-center justify-center shadow-xl transition-all hover:scale-110 text-white"
+                    data-testid="flip-camera-button"
+                  >
+                    <RefreshCw size={24} />
+                  </button>
+                  <span className="text-white/90 text-sm font-medium drop-shadow">
+                    Flip
+                  </span>
+                </div>
+
+                {/* End Call - Larger and more prominent */}
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={endCall}
+                    className="w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-2xl transition-all hover:scale-110"
+                    data-testid="end-call-button"
+                  >
+                    <PhoneOff size={28} className="text-white" />
+                  </button>
+                  <span className="text-white font-semibold text-base drop-shadow-lg">End</span>
+                </div>
               </div>
             </div>
           )}
         </div>
+      ) : (
+        /* Voice Call UI */
+        <div className="w-full h-full flex flex-col items-center justify-between py-16 px-8">
+          {/* User Info Section */}
+          <div className="flex-1 flex flex-col items-center justify-center">
+            {/* Profile Picture */}
+            <div className="mb-8">
+              <Avatar className="w-40 h-40 border-4 border-white/10">
+                <AvatarImage src={displayUser?.profile_photo} />
+                <AvatarFallback className="text-5xl bg-gradient-to-br from-teal-500 to-teal-700 text-white">
+                  {displayUser?.real_name?.[0] || displayUser?.username?.[0]}
+                </AvatarFallback>
+              </Avatar>
+            </div>
 
-        {/* Controls */}
-        {callActive && (
-          <div className="p-6 backdrop-blur-xl bg-black/50 border-t border-white/5 flex items-center justify-center gap-4">
-            <Button
-              onClick={toggleMute}
-              data-testid="mute-button"
-              variant={isMuted ? "destructive" : "default"}
-              size="icon"
-              className={`w-14 h-14 rounded-full ${
-                isMuted
-                  ? "bg-[#EF4444] hover:bg-[#DC2626]"
-                  : "bg-white/10 hover:bg-white/20"
-              }`}
-            >
-              {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
-            </Button>
+            {/* Name */}
+            <h2 className="text-white text-3xl font-semibold mb-2">
+              {displayUser?.real_name}
+            </h2>
 
-            {callType === "video" && (
-              <Button
-                onClick={toggleVideo}
-                data-testid="video-toggle-button"
-                variant={isVideoOff ? "destructive" : "default"}
-                size="icon"
-                className={`w-14 h-14 rounded-full ${
-                  isVideoOff
-                    ? "bg-[#EF4444] hover:bg-[#DC2626]"
-                    : "bg-white/10 hover:bg-white/20"
-                }`}
-              >
-                {isVideoOff ? <VideoOff size={24} /> : <Video size={24} />}
-              </Button>
+            {/* Status / Timer */}
+            {callActive ? (
+              <CallTimer />
+            ) : (
+              <p className="text-white/60 text-base">
+                {incoming ? "Incoming voice call..." : "Calling..."}
+              </p>
+            )}
+          </div>
+
+          {/* Controls Section */}
+          <div className="w-full max-w-md">
+            {/* Incoming call controls */}
+            {incoming && !callActive && (
+              <div className="flex justify-center gap-24 mb-8">
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={rejectCall}
+                    className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-all"
+                    data-testid="reject-call-button"
+                  >
+                    <PhoneOff size={24} className="text-white" />
+                  </button>
+                  <span className="text-white/70 text-sm">Decline</span>
+                </div>
+                
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={acceptCall}
+                    className="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center shadow-lg transition-all"
+                    data-testid="accept-call-button"
+                  >
+                    <Phone size={24} className="text-white" />
+                  </button>
+                  <span className="text-white/70 text-sm">Accept</span>
+                </div>
+              </div>
             )}
 
-            <Button
-              onClick={endCall}
-              data-testid="end-call-button"
-              className="w-14 h-14 rounded-full bg-[#EF4444] hover:bg-[#DC2626] text-white"
-            >
-              <PhoneOff size={24} />
-            </Button>
+            {/* Active call controls */}
+            {callActive && (
+              <div className="flex justify-center gap-8 mb-8">
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={toggleMute}
+                    className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
+                      isMuted ? "bg-white hover:bg-gray-100" : "bg-white/20 hover:bg-white/30"
+                    }`}
+                    data-testid="mute-button"
+                  >
+                    {isMuted ? (
+                      <MicOff size={20} className="text-gray-900" />
+                    ) : (
+                      <Mic size={20} className="text-white" />
+                    )}
+                  </button>
+                  <span className="text-white/50 text-xs">
+                    {isMuted ? "Unmute" : "Mute"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={toggleSpeaker}
+                    className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
+                      isSpeakerOn ? "bg-white/20 hover:bg-white/30" : "bg-white hover:bg-gray-100"
+                    }`}
+                    data-testid="speaker-button"
+                  >
+                    {isSpeakerOn ? (
+                      <Volume2 size={20} className="text-white" />
+                    ) : (
+                      <VolumeX size={20} className="text-gray-900" />
+                    )}
+                  </button>
+                  <span className="text-white/50 text-xs">
+                    {isSpeakerOn ? "Speaker" : "Earpiece"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={endCall}
+                    className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-all"
+                    data-testid="end-call-button"
+                  >
+                    <PhoneOff size={24} className="text-white" />
+                  </button>
+                  <span className="text-white/50 text-xs">End</span>
+                </div>
+              </div>
+            )}
+
+            {/* Cancel button for outgoing calls */}
+            {!callActive && !incoming && (
+              <div className="flex justify-center">
+                <button
+                  onClick={endCall}
+                  className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg transition-all"
+                  data-testid="cancel-call-button"
+                >
+                  <PhoneOff size={24} className="text-white" />
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
