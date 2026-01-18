@@ -114,7 +114,7 @@ export default function CallModal({ callData, socket, userId, onClose }) {
       toast.error("Failed to access camera/microphone");
       onClose();
     }
-  }, [callType, otherUser, socket, onClose]);
+  }, [callType, otherUser, socket, onClose, endCall]);
 
   useEffect(() => {
     if (!incoming) {

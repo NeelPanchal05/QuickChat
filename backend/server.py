@@ -46,7 +46,7 @@ db = client[os.environ.get('DB_NAME', 'quickchat')] # Added default fallback
 # Socket.IO server
 sio = socketio.AsyncServer(
     async_mode='asgi',
-    cors_allowed_origins=['http://localhost:3000', 'http://127.0.0.1:3000'], # Explicitly allow frontend
+    cors_allowed_origins=['http://localhost:3000', 'http://127.0.0.1:3000', 'http://192.168.0.199:3000', 'http://192.168.0.197:3000'], # Allow frontend from localhost and network IPs
     ping_timeout=60,
     ping_interval=25
 )
@@ -58,7 +58,7 @@ app = FastAPI()
 # This tells the browser: "It is okay for localhost:3000 to talk to me"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://192.168.0.199:3000", "http://192.168.0.197:3000"],
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"],  # Allows all headers

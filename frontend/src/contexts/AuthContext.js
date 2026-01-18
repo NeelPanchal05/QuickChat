@@ -9,9 +9,10 @@ import io from "socket.io-client";
 
 const AuthContext = createContext(null);
 
-// Ensure this matches your backend port
-const BACKEND_URL = "http://localhost:8000";
-const API = process.env.REACT_APP_BACKEND_URL || BACKEND_URL;
+// Use environment variable for backend URL (set in .env)
+// Falls back to localhost only if REACT_APP_BACKEND_URL is not set
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+const API = `${BACKEND_URL}/api`;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -31,11 +32,18 @@ export const AuthProvider = ({ children }) => {
   const fetchUser = useCallback(
     async (currentToken) => {
       try {
+        // Create an abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
         const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${currentToken}`,
           },
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (response.ok) {
           const userData = await response.json();
@@ -46,6 +54,12 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.error("Error fetching user:", error);
+        // If it's a network error or timeout, clear the token
+        if (error.name === 'AbortError') {
+          console.error("Request timeout - backend may not be running");
+        }
+        // Clear token on any error to prevent infinite loading
+        logout();
       } finally {
         setLoading(false);
       }

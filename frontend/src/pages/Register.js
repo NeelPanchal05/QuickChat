@@ -54,7 +54,7 @@ export default function Register() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-3 sm:p-4"
+      className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden"
       style={{
         backgroundImage:
           "url(https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85)",
@@ -64,7 +64,7 @@ export default function Register() {
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
 
-      <div className="relative z-10 w-full max-w-md max-h-screen overflow-y-auto">
+      <div className="relative z-10 w-full max-w-md">
         <div className="backdrop-blur-3xl bg-black/40 border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl">
           <div className="flex items-center justify-center mb-6 sm:mb-8">
             <MessageCircle

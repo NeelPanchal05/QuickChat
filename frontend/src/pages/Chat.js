@@ -203,7 +203,7 @@ export default function Chat() {
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      await fetchUser();
+      await fetchUser(token);
       toast.success("User blocked");
       if (selectedConversation?.other_user?.user_id === userId) {
         setSelectedConversation(null);

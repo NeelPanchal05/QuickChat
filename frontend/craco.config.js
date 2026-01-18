@@ -61,6 +61,24 @@ const webpackConfig = {
         ],
       };
 
+      // Add Node.js polyfills for simple-peer (WebRTC)
+      webpackConfig.resolve = webpackConfig.resolve || {};
+      webpackConfig.resolve.fallback = {
+        ...webpackConfig.resolve.fallback,
+        process: require.resolve('process/browser.js'),
+        buffer: require.resolve('buffer/'),
+      };
+
+      // Provide global process and Buffer
+      const webpack = require('webpack');
+      webpackConfig.plugins = webpackConfig.plugins || [];
+      webpackConfig.plugins.push(
+        new webpack.ProvidePlugin({
+          process: 'process/browser.js',
+          Buffer: ['buffer', 'Buffer'],
+        })
+      );
+
       // Add health check plugin to webpack if enabled
       if (config.enableHealthCheck && healthPluginInstance) {
         webpackConfig.plugins.push(healthPluginInstance);

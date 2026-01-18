@@ -99,7 +99,7 @@ export default function PrivacyManager({ onClose }) {
       );
       toast.success("User unblocked");
       fetchBlockedUsers();
-      fetchUser(); // Update global user context
+      fetchUser(token); // Update global user context
     } catch (e) {
       toast.error("Failed to unblock");
     }

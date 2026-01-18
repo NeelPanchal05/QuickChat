@@ -32,7 +32,7 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-3 sm:p-4"
+      className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden"
       style={{
         backgroundImage:
           "url(https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85)",
