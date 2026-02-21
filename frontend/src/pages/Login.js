@@ -24,7 +24,7 @@ export default function Login() {
       toast.success("Login successful!");
       navigate("/chat");
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Login failed");
+      toast.error(error.message || "Login failed");
     } finally {
       setLoading(false);
     }

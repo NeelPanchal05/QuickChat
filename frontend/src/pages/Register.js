@@ -45,8 +45,8 @@ export default function Register() {
       navigate("/verify-otp", { state: { email: formData.email } });
     } catch (error) {
       console.error("Registration error:", error);
-      console.error("Error response:", error.response?.data);
-      toast.error(error.response?.data?.detail || "Registration failed");
+      console.error("Error message:", error.message);
+      toast.error(error.message || "Registration failed");
     } finally {
       setLoading(false);
     }

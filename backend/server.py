@@ -192,7 +192,13 @@ async def register(user_data: UserRegister):
     })
     
     html = f"<h2>Welcome to QuickChat!</h2><p>Your OTP is: <b>{otp}</b></p>"
-    await send_email_func(user_data.email, "QuickChat - Verification Code", html)
+    email_sent = await send_email_func(user_data.email, "QuickChat - Verification Code", html)
+    
+    if not email_sent:
+        # Clean up pending data since email failed
+        await db.otps.delete_many({'email': user_data.email})
+        await db.pending_users.delete_many({'email': user_data.email})
+        raise HTTPException(status_code=500, detail='Failed to send OTP email. Please check your email address or try again later.')
     
     return {'message': 'OTP sent'}
 

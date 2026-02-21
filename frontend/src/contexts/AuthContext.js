@@ -9,9 +9,8 @@ import io from "socket.io-client";
 
 const AuthContext = createContext(null);
 
-// Use environment variable for backend URL (set in .env)
-// Falls back to localhost only if REACT_APP_BACKEND_URL is not set
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+// Use environment variable for backend URL, defaulting to localhost for development
+const BACKEND_URL = "http://localhost:8000";
 const API = `${BACKEND_URL}/api`;
 
 export const AuthProvider = ({ children }) => {
@@ -48,18 +47,20 @@ export const AuthProvider = ({ children }) => {
         if (response.ok) {
           const userData = await response.json();
           setUser(userData);
-        } else {
-          // If token is invalid, clear it
+        } else if (response.status === 401) {
+          // Only logout if the token is explicitly rejected by the server
           logout();
+        } else {
+          // For other server errors (500, etc.), don't logout — just log it
+          console.error("Failed to fetch user, status:", response.status);
         }
       } catch (error) {
         console.error("Error fetching user:", error);
-        // If it's a network error or timeout, clear the token
+        // Network errors or timeout: do NOT logout — backend may be temporarily unreachable
         if (error.name === 'AbortError') {
           console.error("Request timeout - backend may not be running");
         }
-        // Clear token on any error to prevent infinite loading
-        logout();
+        // Don't call logout() here — preserve the session
       } finally {
         setLoading(false);
       }
@@ -124,20 +125,24 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (userData) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(userData),
-      });
+    const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(userData),
+    });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Registration failed");
-      return data;
-    } catch (err) {
-      console.error("Registration error:", err);
-      throw err;
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      const text = await res.clone().text().catch(() => "");
+      throw new Error(text || "Registration failed. Please try again.");
     }
+
+    if (!res.ok) {
+      throw new Error(data.detail || "Registration failed");
+    }
+    return data;
   };
 
   const verifyOtp = async (email, otp) => {

@@ -31,7 +31,7 @@ export default function VerifyOTP() {
       toast.success("Account verified successfully!");
       navigate("/chat");
     } catch (error) {
-      toast.error(error.response?.data?.detail || "OTP verification failed");
+      toast.error(error.message || "OTP verification failed");
     } finally {
       setLoading(false);
     }
