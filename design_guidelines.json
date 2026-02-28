@@ -1,0 +1,179 @@
+{
+  "identity": {
+    "name": "QuickChat",
+    "archetype": "The Cyber-Noir Architect",
+    "vibe": "Premium, Stealth, Kinetic, Metallic",
+    "core_philosophy": "Communication at the speed of light in a vacuum. No distractions, just pure signal."
+  },
+  "typography": {
+    "headings": {
+      "family": "Outfit, sans-serif",
+      "weights": ["600", "700"],
+      "usage": "Use for all section headers, modal titles, and hero text. Tracking tight (-0.02em).",
+      "fallback": "system-ui"
+    },
+    "body": {
+      "family": "Manrope, sans-serif",
+      "weights": ["400", "500"],
+      "usage": "Use for chat messages, inputs, and metadata. High legibility is key.",
+      "fallback": "sans-serif"
+    },
+    "mono": {
+      "family": "JetBrains Mono, monospace",
+      "usage": "Use for timestamps, code snippets, and encryption keys.",
+      "fallback": "monospace"
+    },
+    "import_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600&family=Outfit:wght@600;700&display=swap"
+  },
+  "colors": {
+    "palette": {
+      "background": {
+        "default": "#050505",
+        "paper": "#0A0A0A",
+        "subtle": "#121212"
+      },
+      "primary": {
+        "main": "#7000FF",
+        "light": "#9D4DFF",
+        "dark": "#4A00B3",
+        "glow": "0 0 20px rgba(112, 0, 255, 0.5)"
+      },
+      "secondary": {
+        "main": "#00F0FF",
+        "dim": "rgba(0, 240, 255, 0.1)"
+      },
+      "text": {
+        "primary": "#EDEDED",
+        "secondary": "#A1A1AA",
+        "muted": "#52525B"
+      },
+      "status": {
+        "online": "#10B981",
+        "offline": "#52525B",
+        "busy": "#EF4444",
+        "away": "#F59E0B"
+      },
+      "glass": {
+        "panel": "rgba(10, 10, 10, 0.6)",
+        "border": "rgba(255, 255, 255, 0.08)"
+      }
+    },
+    "gradients": {
+      "brand": "linear-gradient(135deg, #7000FF 0%, #00F0FF 100%)",
+      "dark_metal": "linear-gradient(180deg, #121212 0%, #050505 100%)",
+      "message_sent": "linear-gradient(135deg, #7000FF 0%, #5B00D1 100%)"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": {
+      "sidebar": "backdrop-filter: blur(20px); background: rgba(5, 5, 5, 0.7); border-right: 1px solid rgba(255, 255, 255, 0.05);",
+      "modal": "backdrop-filter: blur(24px); background: rgba(10, 10, 10, 0.8); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);"
+    },
+    "borders": {
+      "subtle": "1px solid rgba(255, 255, 255, 0.08)",
+      "active": "1px solid #7000FF"
+    },
+    "shadows": {
+      "neon": "0 0 15px rgba(112, 0, 255, 0.3)",
+      "deep": "0 10px 30px rgba(0, 0, 0, 0.8)"
+    },
+    "textures": {
+      "noise": "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E\")"
+    }
+  },
+  "layout": {
+    "grid_system": "Use CSS Grid for the main app shell: Sidebar (280px-320px) | Chat Area (1fr) | Info Panel (300px, collapsible).",
+    "spacing": {
+      "container_padding": "p-6 md:p-8",
+      "gap": "gap-4 md:gap-6"
+    },
+    "z_index": {
+      "toast": 100,
+      "modal": 50,
+      "dropdown": 40,
+      "header": 30,
+      "base": 1
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-white rounded-full px-6 py-2 font-semibold hover:shadow-[0_0_20px_rgba(112,0,255,0.4)] transition-all duration-300 transform hover:-translate-y-0.5",
+      "ghost": "bg-transparent text-text-secondary hover:text-white hover:bg-white/5 rounded-lg px-4 py-2 transition-colors",
+      "icon": "p-2 rounded-full hover:bg-white/10 text-text-secondary hover:text-primary transition-colors"
+    },
+    "inputs": {
+      "chat": "bg-white/5 border border-white/10 rounded-full px-6 py-3 text-text-primary focus:border-primary/50 focus:ring-1 focus:ring-primary/50 focus:outline-none transition-all placeholder:text-text-muted",
+      "form": "bg-black/20 border border-white/10 rounded-lg px-4 py-3 text-text-primary focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+    },
+    "cards": {
+      "base": "bg-card/50 backdrop-blur-md border border-white/5 rounded-xl p-6 hover:border-white/10 transition-colors"
+    },
+    "chat_bubbles": {
+      "sent": "bg-gradient-to-br from-primary to-primary-dark text-white rounded-2xl rounded-tr-sm px-4 py-2 shadow-lg",
+      "received": "bg-white/10 text-text-primary rounded-2xl rounded-tl-sm px-4 py-2 backdrop-blur-sm"
+    }
+  },
+  "motion": {
+    "transitions": {
+      "default": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      "bounce": "all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)"
+    },
+    "animations": {
+      "fade_in": "animate-in fade-in duration-500",
+      "slide_up": "animate-in slide-in-from-bottom-4 duration-500",
+      "pulse_glow": "animate-pulse"
+    }
+  },
+  "media": {
+    "avatars": {
+      "style": "Rounded-full with a 2px border. Border color indicates status (Green=Online, etc).",
+      "default_size": "h-10 w-10"
+    },
+    "image_urls": {
+      "hero_background": "https://images.unsplash.com/photo-1764553230197-ca14bbc82b8c?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "auth_background": "https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "user_avatars": [
+        "https://images.unsplash.com/photo-1624377103868-c780d0fa2b4c?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "https://images.unsplash.com/photo-1615793802337-13401406c3ea?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "https://images.unsplash.com/photo-1597069170894-eb727a7a7b3c?crop=entropy&cs=srgb&fm=jpg&q=85"
+      ],
+      "placeholders": {
+        "logo": "https://customer-assets.emergentagent.com/job_c4ac0a5b-5701-4431-9117-25fc9e31e640/artifacts/rntc93ov_logo%20for%20my%20chatting%20app%20named%20QuickChat%20%282%29.jpg"
+      }
+    }
+  },
+  "accessibility": {
+    "contrast": "Ensure all text has at least 4.5:1 contrast ratio against the dark background.",
+    "focus_states": "Visible focus rings (2px solid primary color) on all interactive elements.",
+    "aria": "Use aria-labels for icon-only buttons (e.g., 'Send Message', 'Attach File')."
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Install 'lucide-react' for icons, 'framer-motion' for animations, and 'clsx'/'tailwind-merge' for class management.",
+    "2. THEME: Implement the dark theme by default. Do not rely on system preference initially; force the 'dark' class on the html/body tag.",
+    "3. LAYOUT: Build a responsive layout. On mobile, the sidebar should be a drawer/sheet. On desktop, it's persistent.",
+    "4. CHAT: Ensure the chat window scrolls to bottom automatically on new message. Use a virtual list if expecting many messages (optional for MVP).",
+    "5. AUTH: Create a stunning login page using the 'auth_background' image with a glassmorphic form overlay.",
+    "6. COMPONENTS: Customize Shadcn components to match the 'Cyber-Noir' aesthetic. Remove default white backgrounds and replace with dark glass.",
+    "7. CRITICAL: Do not use 'Inter' font. Load 'Outfit' and 'Manrope' from Google Fonts in the index.html or CSS."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: 'transition: all'. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms.",
+    "You MUST NOT center align the app container, ie do not add '.App { text-align: center; }' in the css file. This disrupts the human natural reading flow of text.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Create new components that match the style and conventions of existing components when needed.",
+    "Examine existing components to understand the project's component patterns before creating new ones.",
+    "Components MUST use named exports (export const ComponentName = ...).",
+    "Pages MUST use default exports (export default function PageName() {...}).",
+    "Use 'sonner' for toasts. Sonner component are located in '/app/src/components/ui/sonner.tsx'."
+  ]
+}
