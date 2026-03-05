@@ -529,31 +529,31 @@ export default function Chat() {
     );
 
   return (
-    <div className="h-screen flex flex-col md:flex-row bg-background font-sans overflow-hidden">
+    <div className="h-screen flex flex-col md:flex-row overflow-hidden" style={{background: 'linear-gradient(135deg, #07070f 0%, #0d0d1a 100%)'}}>
       {/* Sidebar */}
       <div
         className={`${
           selectedConversation ? "hidden md:flex" : "flex"
-        } w-full md:w-80 backdrop-blur-xl bg-card/80 border-r border-border flex-col h-full`}
+        } w-full md:w-80 flex-col h-full relative z-10`}
+        style={{ background: 'rgba(10,10,20,0.92)', borderRight: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}
       >
-        <div className="p-4 border-b border-border">
+        {/* Sidebar top gradient orb */}
+        <div className="absolute top-0 left-0 right-0 h-48 pointer-events-none" style={{background: 'radial-gradient(ellipse at 50% -20%, rgba(109,40,217,0.18) 0%, transparent 70%)'}} />
+        <div className="p-4 border-b relative" style={{borderColor: 'rgba(255,255,255,0.06)'}}>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center">
-                <MessageCircle className="text-primary-foreground w-5 h-5" />
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background: 'linear-gradient(135deg, #7c3aed, #4f46e5)'}}>
+                <MessageCircle className="text-white w-5 h-5" />
               </div>
-              <h1 className="text-xl font-bold text-foreground hidden sm:block">
-                QuickChat
-              </h1>
+              <h1 className="text-xl font-bold gradient-text hidden sm:block">QuickChat</h1>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-1">
               <Button
-                variant="ghost"
-                size="icon"
+                variant="ghost" size="icon"
                 onClick={() => setShowInvite(true)}
-                className="text-muted-foreground hover:text-foreground"
+                className="icon-btn-hover text-muted-foreground h-8 w-8"
               >
-                <UserPlus size={20} />
+                <UserPlus size={18} />
               </Button>
               <SettingsMenu
                 onProfile={() => setShowProfile(true)}
@@ -565,77 +565,69 @@ export default function Chat() {
             </div>
           </div>
           <div className="relative z-20">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              size={16}
-            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
             <Input
               placeholder={t("search_placeholder")}
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                searchUsers(e.target.value);
-              }}
-              className="pl-9 bg-muted border-border text-foreground rounded-full h-9"
+              onChange={(e) => { setSearchQuery(e.target.value); searchUsers(e.target.value); }}
+              className="pl-9 pr-4 rounded-full h-9 text-foreground border-0 text-sm"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
             />
           </div>
           {searchResults.length > 0 && (
-            <div className="mt-2 bg-popover border border-border rounded-lg max-h-48 overflow-y-auto">
+            <div className="mt-2 rounded-xl overflow-hidden" style={{ background: 'rgba(15,15,28,0.95)', border: '1px solid rgba(255,255,255,0.08)', maxHeight: '12rem', overflowY: 'auto' }}>
               {searchResults.map((u) => (
                 <div
                   key={u.user_id}
                   onClick={() => createOrOpenConversation(u.user_id)}
-                  className="p-3 hover:bg-accent cursor-pointer flex items-center gap-3"
+                  className="p-3 hover:bg-white/5 cursor-pointer flex items-center gap-3 transition-colors"
                 >
-                  <Avatar className="h-8 w-8">
+                  <Avatar className="h-8 w-8 ring-1" style={{ringColor:'rgba(139,92,246,0.3)'}}>
                     <AvatarImage src={u.profile_photo} />
-                    <AvatarFallback>{u.username[0]}</AvatarFallback>
+                    <AvatarFallback style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)',color:'white',fontSize:'12px'}}>{u.username[0].toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {u.real_name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      @{u.username}
-                    </p>
+                    <p className="text-sm font-medium text-foreground">{u.real_name}</p>
+                    <p className="text-xs text-muted-foreground">@{u.username}</p>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
           {conversations.map((c) => (
             <div
               key={c.conversation_id}
               onClick={() => setSelectedConversation(c)}
-              className={`group p-4 border-b border-border cursor-pointer hover:bg-accent transition-colors relative ${
+              className={`conv-row group p-4 border-b cursor-pointer relative ${
                 selectedConversation?.conversation_id === c.conversation_id
-                  ? "bg-accent/80"
-                  : ""
+                  ? "active bg-white/[0.04]"
+                  : "hover:bg-white/[0.03]"
               }`}
+              style={{ borderColor: 'rgba(255,255,255,0.05)', transition: 'background 0.18s' }}
             >
               <div className="flex items-center gap-3">
-                <div className="relative">
-                  <Avatar>
+                <div className="relative flex-shrink-0">
+                  <Avatar className="h-11 w-11 ring-2" style={{ringColor: selectedConversation?.conversation_id === c.conversation_id ? 'rgba(139,92,246,0.5)' : 'transparent'}}>
                     <AvatarImage src={c.other_user?.profile_photo} />
-                    <AvatarFallback>{c.other_user?.username?.[0] ?? "?"}</AvatarFallback>
+                    <AvatarFallback style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)',color:'white',fontFamily:"'Space Grotesk',sans-serif",fontWeight:700}}>{c.other_user?.username?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
                   </Avatar>
                   {isUserOnline(c.other_user?.user_id) && (
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background"></div>
+                    <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 online-badge" style={{background:'#22c55e', borderColor:'rgba(10,10,20,1)'}} />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between">
-                    <span className="font-medium text-foreground truncate">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-sm text-foreground truncate">
                       {c.other_user?.real_name}
                     </span>
-                    {c.is_pinned && <Pin size={12} className="text-primary" />}
+                    {c.is_pinned && <Pin size={11} className="text-violet-400 flex-shrink-0" />}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {c.last_message?.content
-                      ? c.last_message.content.length > 30
-                        ? c.last_message.content.substring(0, 30) + "..."
+                      ? c.last_message.content.length > 32
+                        ? c.last_message.content.substring(0, 32) + "…"
                         : c.last_message.content
                       : t("start_chatting")}
                   </p>
@@ -643,31 +635,22 @@ export default function Chat() {
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      >
-                        <MoreVertical size={16} />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                        <MoreVertical size={14} />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="bg-popover border-border"
-                    >
+                    <DropdownMenuContent align="end" className="w-40" style={{background:'rgba(14,14,26,0.97)',border:'1px solid rgba(255,255,255,0.08)'}}>
                       <DropdownMenuItem
                         onClick={(e) => blockUser(e, c.other_user?.user_id)}
-                        className="text-destructive focus:text-destructive cursor-pointer"
+                        className="text-destructive focus:text-destructive cursor-pointer text-xs"
                       >
-                        <UserX size={14} className="mr-2" /> Block User
+                        <UserX size={13} className="mr-2" /> Block User
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={(e) =>
-                          deleteConversation(e, c.conversation_id)
-                        }
-                        className="text-destructive focus:text-destructive cursor-pointer"
+                        onClick={(e) => deleteConversation(e, c.conversation_id)}
+                        className="text-destructive focus:text-destructive cursor-pointer text-xs"
                       >
-                        <Trash2 size={14} className="mr-2" /> Delete Chat
+                        <Trash2 size={13} className="mr-2" /> Delete Chat
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -684,343 +667,253 @@ export default function Chat() {
           className={`${
             !selectedConversation ? "hidden md:flex" : "flex"
           } flex-1 flex-col h-full relative`}
-          style={
-            currentThemeData?.bgStyle || {
-              backgroundColor: "var(--background)",
-            }
-          }
+          style={currentThemeData?.bgStyle || { background: 'linear-gradient(180deg, rgba(10,10,18,1) 0%, rgba(8,8,15,1) 100%)' }}
         >
-          <div className="p-3 md:p-4 backdrop-blur-md bg-card/80 border-b border-border flex justify-between items-center z-10">
+          {/* Chat Header */}
+          <div className="p-3 md:p-4 flex justify-between items-center z-10 flex-shrink-0"
+            style={{ background: 'rgba(10,10,20,0.88)', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)' }}
+          >
             <div className="flex items-center gap-3">
               <Button
-                variant="ghost"
-                size="icon"
-                className="md:hidden text-foreground"
+                variant="ghost" size="icon"
+                className="md:hidden text-foreground icon-btn-hover"
                 onClick={() => setSelectedConversation(null)}
               >
                 <X />
               </Button>
-              <Avatar className="h-9 w-9">
-                <AvatarImage
-                  src={selectedConversation.other_user?.profile_photo}
-                />
-                <AvatarFallback>
-                  {selectedConversation.other_user?.username?.[0] ?? "?"}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <div className="rounded-full p-[2px]" style={{background: 'linear-gradient(135deg,#7c3aed,#4f46e5)'}}>
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={selectedConversation.other_user?.profile_photo} />
+                    <AvatarFallback style={{background:'#0d0d1a',color:'white',fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
+                      {selectedConversation.other_user?.username?.[0]?.toUpperCase() ?? "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+                {isUserOnline(selectedConversation.other_user?.user_id) && (
+                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 online-badge" style={{background:'#22c55e', borderColor:'rgba(10,10,20,1)'}} />
+                )}
+              </div>
               <div>
-                <h3 className="font-bold text-foreground text-sm">
-                  {selectedConversation.other_user?.real_name}
-                </h3>
-                <span className="text-xs text-muted-foreground">
-                  {isUserOnline(selectedConversation.other_user?.user_id)
-                    ? t("online")
-                    : t("offline")}
+                <h3 className="font-bold text-foreground text-sm">{selectedConversation.other_user?.real_name}</h3>
+                <span className="text-xs" style={{color: isUserOnline(selectedConversation.other_user?.user_id) ? '#22c55e' : 'rgba(255,255,255,0.35)'}}>
+                  {isUserOnline(selectedConversation.other_user?.user_id) ? t("online") : t("offline")}
                 </span>
               </div>
             </div>
             <div className="flex gap-1 md:gap-2 items-center">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => startCall("audio")}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Phone size={18} />
+              <Button variant="ghost" size="icon" onClick={() => startCall("audio")} className="icon-btn-hover text-muted-foreground h-8 w-8">
+                <Phone size={17} />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => startCall("video")}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Video size={18} />
+              <Button variant="ghost" size="icon" onClick={() => startCall("video")} className="icon-btn-hover text-muted-foreground h-8 w-8">
+                <Video size={17} />
               </Button>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <Calendar size={18} />
-                  </Button>
+                  <Button variant="ghost" size="icon" className="icon-btn-hover text-muted-foreground h-8 w-8"><Calendar size={17} /></Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80 bg-popover border border-border p-4">
-                  <h4 className="text-foreground font-medium mb-2">
-                    Search by Date
-                  </h4>
+                <PopoverContent className="w-80 p-4" style={{background:'rgba(14,14,26,0.97)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                  <h4 className="text-foreground font-semibold mb-3 text-sm">Search by Date</h4>
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="date"
-                        className="bg-muted text-foreground"
-                        onChange={(e) =>
-                          setDateSearch({
-                            ...dateSearch,
-                            start: e.target.value,
-                          })
-                        }
-                      />
-                      <Input
-                        type="date"
-                        className="bg-muted text-foreground"
-                        onChange={(e) =>
-                          setDateSearch({ ...dateSearch, end: e.target.value })
-                        }
-                      />
+                      <Input type="date" className="bg-muted text-foreground text-xs" onChange={(e) => setDateSearch({...dateSearch, start: e.target.value})} />
+                      <Input type="date" className="bg-muted text-foreground text-xs" onChange={(e) => setDateSearch({...dateSearch, end: e.target.value})} />
                     </div>
-                    <Button
-                      className="w-full"
-                      onClick={() =>
-                        fetchMessages(
-                          selectedConversation.conversation_id,
-                          dateSearch
-                        )
-                      }
-                    >
-                      Search
-                    </Button>
+                    <Button className="w-full text-sm" style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)'}} onClick={() => fetchMessages(selectedConversation.conversation_id, dateSearch)}>Search</Button>
                   </div>
                 </PopoverContent>
               </Popover>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowPrivacy(true)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Shield size={18} />
-              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setShowPrivacy(true)} className="icon-btn-hover text-muted-foreground h-8 w-8"><Shield size={17} /></Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <MoreVertical size={18} />
-                  </Button>
+                  <Button variant="ghost" size="icon" className="icon-btn-hover text-muted-foreground h-8 w-8"><MoreVertical size={17} /></Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="w-48 bg-popover border-border text-foreground"
-                >
-                  <DropdownMenuItem
-                    onClick={clearChat}
-                    className="text-destructive cursor-pointer"
-                  >
-                    <Eraser className="mr-2 h-4 w-4" />
-                    <span>{t("clear_chat")}</span>
+                <DropdownMenuContent align="end" className="w-48 text-foreground" style={{background:'rgba(14,14,26,0.97)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                  <DropdownMenuItem onClick={clearChat} className="text-destructive cursor-pointer text-sm">
+                    <Eraser className="mr-2 h-4 w-4" /><span>{t("clear_chat")}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-            {messages.map((m) => {
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+            {messages.map((m, i) => {
               const isOwn = user && m.sender_id === user.user_id;
 
-              // Prevent Poll crashes
               if (m.message_type === "poll") return null;
 
               return (
                 <div
                   key={m.message_id}
-                  className={`flex ${
-                    isOwn ? "justify-end" : "justify-start"
-                  } animate-message-in`}
+                  className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-message-in`}
+                  style={{ animationDelay: `${Math.min(i * 0.02, 0.3)}s` }}
                 >
                   <div
-                    className={`max-w-[75%] p-3 rounded-2xl ${
+                    className={`max-w-[72%] px-4 py-2.5 rounded-2xl ${
                       isOwn
-                        ? "bg-primary text-primary-foreground rounded-tr-none"
-                        : "bg-muted text-foreground rounded-tl-none backdrop-blur-sm"
+                        ? "bubble-own text-white rounded-tr-sm"
+                        : "bubble-other text-foreground rounded-tl-sm"
                     }`}
                   >
-                    {m.message_type === "text" && <p>{m.content}</p>}
+                    {m.message_type === "text" && (
+                      <p className="text-sm leading-relaxed break-words">{m.content}</p>
+                    )}
                     {m.message_type === "location" && (
                       <a
                         href={m.content}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 underline text-inherit"
+                        className="flex items-center gap-2 text-inherit text-sm underline underline-offset-2"
                       >
-                        <MapPin size={16} /> {t("view_location")}
+                        <MapPin size={14} /> {t("view_location")}
                       </a>
                     )}
                     {m.message_type === "image" && (
-                      <img
-                        src={m.content}
-                        alt="attachment"
-                        className="rounded-lg max-h-60"
-                      />
+                      <img src={m.content} alt="attachment" className="rounded-xl max-h-60 object-cover" />
+                    )}
+                    {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
+                      <video controls src={m.content} className="max-w-full rounded-xl" />
                     )}
                     {m.message_type &&
-                      ["audio", "video"].includes(
-                        m.message_type.split("/")[0]
-                      ) && (
-                        <video
-                          controls
-                          src={m.content}
-                          className="max-w-full rounded-lg"
-                        />
-                      )}
-                    {m.message_type &&
-                      !["text", "location", "image", "poll"].includes(
-                        m.message_type
-                      ) &&
-                      !["audio", "video"].includes(
-                        m.message_type.split("/")[0]
-                      ) && (
-                        <div className="flex items-center gap-2">
-                          <Paperclip size={16} />
-                          <span className="text-sm underline">
-                            {m.file_name || t("attached_file")}
-                          </span>
-                        </div>
-                      )}
-                    <div className="flex justify-between items-center mt-1 gap-2">
-                      <span className="text-[10px] opacity-70">
-                        {new Date(m.timestamp).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                      !["text", "location", "image", "poll"].includes(m.message_type) &&
+                      !["audio", "video"].includes(m.message_type.split("/")[0]) && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Paperclip size={14} />
+                        <span className="underline underline-offset-2">{m.file_name || t("attached_file")}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-end items-center mt-1 gap-1.5">
+                      <span className="text-[10px]" style={{opacity: 0.55}}>
+                        {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                       {isOwn && (
-                        <MessageReadStatus
-                          status={m.read_by?.length > 1 ? "read" : "sent"}
-                        />
+                        <MessageReadStatus status={m.read_by?.length > 1 ? "read" : "sent"} />
                       )}
                     </div>
                   </div>
                 </div>
               );
             })}
+            {/* Typing indicator */}
+            {typing && (
+              <div className="flex justify-start animate-fade-up">
+                <div className="px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-1.5" style={{background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.07)'}}>
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full" style={{background:'rgba(139,92,246,0.8)'}} />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full" style={{background:'rgba(139,92,246,0.8)'}} />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full" style={{background:'rgba(139,92,246,0.8)'}} />
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
-          <div className="p-3 backdrop-blur-md bg-card/80 border-t border-border">
+          {/* Input Bar */}
+          <div className="p-3 flex-shrink-0" style={{background:'rgba(10,10,20,0.9)', borderTop:'1px solid rgba(255,255,255,0.06)', backdropFilter:'blur(20px)'}}>
             {isCurrentChatBlocked ? (
-              <div className="w-full text-center p-2 text-destructive font-medium bg-destructive/10 rounded-lg">
+              <div className="w-full text-center p-3 text-sm font-medium rounded-xl" style={{background:'rgba(239,68,68,0.1)', color:'#f87171', border:'1px solid rgba(239,68,68,0.2)'}}>
                 You have blocked this user. Unblock to send messages.
               </div>
             ) : (
               <>
                 {showMediaUploader && (
-                  <MediaUploader
-                    onUpload={(f) => setAttachedFiles((p) => [...p, f])}
-                  />
+                  <MediaUploader onUpload={(f) => setAttachedFiles((p) => [...p, f])} />
                 )}
                 {attachedFiles.length > 0 && (
-                  <div className="flex gap-2 mb-2 overflow-x-auto pb-2">
+                  <div className="flex gap-2 mb-2 overflow-x-auto pb-1">
                     {attachedFiles.map((f) => (
                       <div
                         key={f.id}
-                        className="bg-muted px-3 py-1 rounded-full flex items-center gap-2 text-foreground text-xs"
+                        className="px-3 py-1 rounded-full flex items-center gap-2 text-xs animate-slide-in-left flex-shrink-0"
+                        style={{background:'rgba(139,92,246,0.15)', border:'1px solid rgba(139,92,246,0.25)', color:'#c4b5fd'}}
                       >
-                        {f.name}{" "}
+                        {f.name}
                         <X
-                          size={12}
-                          className="cursor-pointer"
-                          onClick={() =>
-                            setAttachedFiles(
-                              attachedFiles.filter((x) => x.id !== f.id)
-                            )
-                          }
+                          size={11}
+                          className="cursor-pointer opacity-70 hover:opacity-100"
+                          onClick={() => setAttachedFiles(attachedFiles.filter((x) => x.id !== f.id))}
                         />
                       </div>
                     ))}
                   </div>
                 )}
                 {showEmojiPicker && (
-                  <div className="absolute bottom-20">
+                  <div className="absolute bottom-20 z-50">
                     <EmojiPicker
-                      theme={currentThemeData.bgStyle ? "dark" : "auto"}
+                      theme="dark"
                       onEmojiClick={(e) => setMessageInput((p) => p + e.emoji)}
                     />
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowMediaUploader(!showMediaUploader)}
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <Paperclip size={20} />
+                  <div className="flex gap-0.5">
+                    <Button variant="ghost" size="icon" onClick={() => setShowMediaUploader(!showMediaUploader)}
+                      className="icon-btn-hover h-9 w-9 text-muted-foreground">
+                      <Paperclip size={18} />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                      className="icon-btn-hover h-9 w-9 text-muted-foreground">
+                      <Smile size={18} />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={sendLocation}
+                      className="icon-btn-hover h-9 w-9 text-muted-foreground">
+                      <MapPin size={18} />
                     </Button>
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <Smile size={20} />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={sendLocation}
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <MapPin size={20} />
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
+                      variant="ghost" size="icon"
                       onClick={isRecording ? stopRecording : startRecording}
-                      className={`${
-                        isRecording
-                          ? "text-destructive animate-pulse"
-                          : "text-muted-foreground hover:text-primary"
+                      className={`h-9 w-9 icon-btn-hover ${
+                        isRecording ? "recording-btn text-red-400" : "text-muted-foreground"
                       }`}
                     >
-                      {isRecording ? (
-                        <Square size={20} fill="currentColor" />
-                      ) : (
-                        <Mic size={20} />
-                      )}
+                      {isRecording ? <Square size={18} fill="currentColor" /> : <Mic size={18} />}
                     </Button>
                   </div>
                   <Input
                     value={messageInput}
                     onChange={(e) => {
                       setMessageInput(e.target.value);
-                      socket?.emit("typing", {
-                        conversation_id: selectedConversation.conversation_id,
-                      });
+                      socket?.emit("typing", { conversation_id: selectedConversation.conversation_id });
                     }}
                     onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                    placeholder={
-                      isRecording ? "Recording..." : t("type_message")
-                    }
-                    className="flex-1 bg-muted border-border text-foreground rounded-full"
+                    placeholder={isRecording ? "Recording…" : t("type_message")}
+                    className="flex-1 rounded-full text-foreground text-sm border-0 h-10"
+                    style={{background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', transition:'border-color 0.2s, box-shadow 0.2s'}}
+                    onFocus={e => { e.target.style.borderColor='rgba(139,92,246,0.5)'; e.target.style.boxShadow='0 0 0 3px rgba(139,92,246,0.1)'; }}
+                    onBlur={e  => { e.target.style.borderColor='rgba(255,255,255,0.08)'; e.target.style.boxShadow='none'; }}
                     disabled={isRecording}
                   />
-                  <Button
+                  <button
                     onClick={sendMessage}
-                    className="bg-primary hover:bg-primary/90 rounded-full w-10 h-10 p-0 flex items-center justify-center"
                     disabled={isRecording}
+                    className="glow-btn flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)', boxShadow:'0 4px 16px rgba(124,58,237,0.4)'}}
                   >
-                    <Send size={18} className="ml-1 text-primary-foreground" />
-                  </Button>
+                    <Send size={16} className="text-white ml-0.5" />
+                  </button>
                 </div>
               </>
             )}
           </div>
         </div>
       ) : (
-        <div className="hidden md:flex flex-1 items-center justify-center bg-background">
-          <div className="text-center text-muted-foreground">
-            <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <MessageCircle size={40} className="text-primary" />
+        <div className="hidden md:flex flex-1 items-center justify-center relative overflow-hidden"
+          style={{background:'linear-gradient(180deg, rgba(9,9,17,1) 0%, rgba(7,7,14,1) 100%)'}}>
+          {/* Decorative orbs */}
+          <div className="absolute w-96 h-96 rounded-full pointer-events-none animate-orb-float"
+            style={{background:'radial-gradient(circle, rgba(109,40,217,0.12) 0%, transparent 70%)', top:'10%', left:'20%'}} />
+          <div className="absolute w-64 h-64 rounded-full pointer-events-none"
+            style={{background:'radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%)', bottom:'15%', right:'15%', animation:'orbFloat 8s ease-in-out infinite reverse'}} />
+          <div className="text-center animate-fade-up">
+            <div
+              className="w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6"
+              style={{background:'linear-gradient(135deg,rgba(124,58,237,0.2),rgba(79,70,229,0.15))', border:'1px solid rgba(139,92,246,0.2)', boxShadow:'0 0 40px rgba(124,58,237,0.15)'}}
+            >
+              <MessageCircle size={44} style={{color:'#a78bfa'}} />
             </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              Welcome to QuickChat
-            </h2>
-            <p>Select a conversation to start chatting securely.</p>
+            <h2 className="text-3xl font-bold gradient-text mb-3">Welcome to QuickChat</h2>
+            <p className="text-muted-foreground text-sm max-w-xs mx-auto leading-relaxed">
+              Select a conversation to start chatting securely and instantly.
+            </p>
           </div>
         </div>
       )}
