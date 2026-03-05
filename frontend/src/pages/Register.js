@@ -1,51 +1,41 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, MessageCircle } from "lucide-react";
+import { Eye, EyeOff, MessageCircle, Sparkles, User, AtSign, Mail, Hash, Lock } from "lucide-react";
 import { toast } from "sonner";
+
+const fields = [
+  { name: "real_name",  label: "Full Name",  icon: User,   type: "text",     placeholder: "Your full name",              testId: "real-name-input" },
+  { name: "username",   label: "Username",   icon: AtSign, type: "text",     placeholder: "@yourhandle",                  testId: "username-input" },
+  { name: "email",      label: "Email",      icon: Mail,   type: "email",    placeholder: "you@example.com",              testId: "email-input" },
+  { name: "unique_id",  label: "Unique ID",  icon: Hash,   type: "text",     placeholder: "A searchable unique ID",       testId: "unique-id-input" },
+  { name: "password",   label: "Password",   icon: Lock,   type: "password", placeholder: "Create a strong password",     testId: "password-input" },
+];
 
 export default function Register() {
   const navigate = useNavigate();
   const { register } = useAuth();
-  const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    email: "",
-    username: "",
-    password: "",
-    real_name: "",
-    unique_id: "",
-  });
+  const [formData, setFormData] = useState({ email: "", username: "", password: "", real_name: "", unique_id: "" });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t); }, []);
+
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!acceptedTerms) {
-      toast.error("Please accept the Terms and Conditions");
-      return;
-    }
-
+    if (!acceptedTerms) { toast.error("Please accept the Terms and Conditions"); return; }
     setLoading(true);
-
     try {
-      console.log("Registering with data:", formData);
-      const response = await register(formData);
-      console.log("Registration response:", response);
+      await register(formData);
       toast.success("OTP sent to your email!");
       navigate("/verify-otp", { state: { email: formData.email } });
     } catch (error) {
-      console.error("Registration error:", error);
-      console.error("Error message:", error.message);
       toast.error(error.message || "Registration failed");
     } finally {
       setLoading(false);
@@ -56,174 +46,123 @@ export default function Register() {
     <div
       className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden"
       style={{
-        backgroundImage:
-          "url(https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85)",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
+        backgroundImage: "url(https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85)",
+        backgroundSize: "cover", backgroundPosition: "center",
       }}
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+      {/* Overlay */}
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(7,7,15,0.9) 0%, rgba(30,0,60,0.78) 100%)', backdropFilter: 'blur(4px)' }} />
 
-      <div className="relative z-10 w-full max-w-md">
-        <div className="backdrop-blur-3xl bg-black/40 border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl">
-          <div className="flex items-center justify-center mb-6 sm:mb-8">
-            <MessageCircle
-              className="h-8 sm:h-12 w-8 sm:w-12 text-[#7000FF]"
-              strokeWidth={2}
-            />
-            <h1
-              className="text-2xl sm:text-4xl font-bold ml-2 sm:ml-3"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              QuickChat
-            </h1>
+      {/* Orbs */}
+      <div className="absolute top-1/3 left-1/5 w-72 h-72 rounded-full pointer-events-none animate-orb-float"
+        style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)', filter: 'blur(50px)' }} />
+      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full pointer-events-none"
+        style={{ background: 'radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 70%)', filter: 'blur(60px)', animation: 'orbFloat 12s ease-in-out infinite reverse' }} />
+
+      <div
+        className="relative z-10 w-full max-w-md"
+        style={{
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(28px)',
+          transition: 'opacity 0.5s cubic-bezier(0.16,1,0.3,1), transform 0.5s cubic-bezier(0.16,1,0.3,1)',
+        }}
+      >
+        <div style={{
+          background: 'rgba(10,10,22,0.82)', backdropFilter: 'blur(28px) saturate(180%)',
+          border: '1px solid rgba(255,255,255,0.08)', borderRadius: '24px',
+          padding: '36px', boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.08), inset 0 1px 0 rgba(255,255,255,0.05)',
+        }}>
+          {/* Logo */}
+          <div className="flex items-center justify-center mb-7" style={{ animation: 'popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s both' }}>
+            <div className="relative">
+              <div className="w-12 h-12 rounded-2xl logo-shimmer flex items-center justify-center" style={{ boxShadow: '0 8px 28px rgba(124,58,237,0.4)' }}>
+                <MessageCircle className="text-white w-6 h-6" />
+              </div>
+              <Sparkles size={12} className="absolute -top-1 -right-1 text-violet-300" style={{ animation: 'popIn 0.4s 0.5s both' }} />
+            </div>
+            <h1 className="text-2xl font-bold ml-3 gradient-text" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>QuickChat</h1>
           </div>
 
-          <h2
-            className="text-xl sm:text-2xl font-semibold mb-6 text-center"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Create Account
-          </h2>
+          <h2 className="text-lg font-semibold mb-1 text-center text-white animate-fade-in" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Create an account</h2>
+          <p className="text-xs text-center mb-6 animate-fade-in stagger-1" style={{ color: 'rgba(255,255,255,0.38)' }}>Join thousands chatting securely</p>
 
-          <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
-            <div>
-              <Label
-                htmlFor="real_name"
-                className="text-[#A1A1AA] text-sm sm:text-base"
-              >
-                Full Name
-              </Label>
-              <Input
-                id="real_name"
-                name="real_name"
-                data-testid="real-name-input"
-                type="text"
-                value={formData.real_name}
-                onChange={handleChange}
-                className="bg-black/20 border-white/10 text-white focus:border-[#7000FF] focus:ring-[#7000FF] mt-2 text-sm sm:text-base"
-                required
-              />
-            </div>
-
-            <div>
-              <Label
-                htmlFor="username"
-                className="text-[#A1A1AA] text-sm sm:text-base"
-              >
-                Username
-              </Label>
-              <Input
-                id="username"
-                name="username"
-                data-testid="username-input"
-                type="text"
-                value={formData.username}
-                onChange={handleChange}
-                className="bg-black/20 border-white/10 text-white focus:border-[#7000FF] focus:ring-[#7000FF] mt-2 text-sm sm:text-base"
-                required
-              />
-            </div>
-
-            <div>
-              <Label
-                htmlFor="email"
-                className="text-[#A1A1AA] text-sm sm:text-base"
-              >
-                Email
-              </Label>
-              <Input
-                id="email"
-                name="email"
-                data-testid="email-input"
-                type="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="bg-black/20 border-white/10 text-white focus:border-[#7000FF] focus:ring-[#7000FF] mt-2 text-sm sm:text-base"
-                required
-              />
-            </div>
-
-            <div>
-              <Label
-                htmlFor="unique_id"
-                className="text-[#A1A1AA] text-sm sm:text-base"
-              >
-                Unique ID
-              </Label>
-              <Input
-                id="unique_id"
-                name="unique_id"
-                data-testid="unique-id-input"
-                type="text"
-                value={formData.unique_id}
-                onChange={handleChange}
-                className="bg-black/20 border-white/10 text-white focus:border-[#7000FF] focus:ring-[#7000FF] mt-2 text-sm sm:text-base"
-                placeholder="Create a unique identifier"
-                required
-              />
-            </div>
-
-            <div>
-              <Label
-                htmlFor="password"
-                className="text-[#A1A1AA] text-sm sm:text-base"
-              >
-                Password
-              </Label>
-              <div className="relative mt-2">
-                <Input
-                  id="password"
-                  name="password"
-                  data-testid="password-input"
-                  type={showPassword ? "text" : "password"}
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="bg-black/20 border-white/10 text-white focus:border-[#7000FF] focus:ring-[#7000FF] pr-10 text-sm sm:text-base"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-white"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {fields.map((f, i) => (
+              <div key={f.name} className="animate-slide-up" style={{ animationDelay: `${0.04 + i * 0.04}s` }}>
+                <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1.5 block" style={{ color: 'rgba(167,139,250,0.7)' }}>
+                  <f.icon size={11} /> {f.label}
+                </label>
+                <div className="relative field-focus-ring">
+                  <Input
+                    name={f.name}
+                    id={f.name}
+                    data-testid={f.testId}
+                    type={f.name === "password" ? (showPassword ? "text" : "password") : f.type}
+                    value={formData[f.name]}
+                    onChange={handleChange}
+                    placeholder={f.placeholder}
+                    className="auth-input h-11 rounded-xl text-white text-sm w-full"
+                    required
+                  />
+                  {f.name === "password" && (
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 icon-btn-hover p-1"
+                      style={{ color: 'rgba(167,139,250,0.6)' }}>
+                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            ))}
 
-            <div className="flex items-start gap-2 mt-2">
-              <Checkbox
-                id="terms"
-                checked={acceptedTerms}
-                onCheckedChange={setAcceptedTerms}
-                className="mt-1"
-              />
-              <Label
-                htmlFor="terms"
-                className="text-[#A1A1AA] text-xs sm:text-sm cursor-pointer leading-tight"
+            {/* Terms */}
+            <div className="flex items-start gap-3 pt-1 animate-fade-in stagger-5">
+              <div
+                className="w-5 h-5 rounded mt-0.5 flex-shrink-0 flex items-center justify-center cursor-pointer transition-all duration-200"
+                style={{
+                  background: acceptedTerms ? 'linear-gradient(135deg,#7c3aed,#4f46e5)' : 'transparent',
+                  border: `1.5px solid ${acceptedTerms ? '#7c3aed' : 'rgba(255,255,255,0.2)'}`,
+                  boxShadow: acceptedTerms ? '0 0 10px rgba(124,58,237,0.4)' : 'none',
+                }}
+                onClick={() => setAcceptedTerms(v => !v)}
               >
-                I agree to the Terms and Conditions and Privacy Policy
-              </Label>
+                {acceptedTerms && (
+                  <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+                    <path d="M1 4.5L4 7.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+              <label className="text-xs leading-snug cursor-pointer" style={{ color: 'rgba(255,255,255,0.45)' }} onClick={() => setAcceptedTerms(v => !v)}>
+                I agree to the{" "}
+                <span style={{ color: '#a78bfa' }}>Terms and Conditions</span> and{" "}
+                <span style={{ color: '#a78bfa' }}>Privacy Policy</span>
+              </label>
             </div>
 
-            <Button
-              type="submit"
-              data-testid="register-button"
-              disabled={loading || !acceptedTerms}
-              className="w-full bg-[#7000FF] hover:bg-[#5B00D1] text-white font-semibold py-5 sm:py-6 rounded-full shadow-[0_0_20px_rgba(112,0,255,0.4)] hover:shadow-[0_0_30px_rgba(112,0,255,0.6)] transition-all duration-300 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ fontFamily: "Manrope, sans-serif" }}
-            >
-              {loading ? "Creating Account..." : "Create Account"}
-            </Button>
+            {/* Submit */}
+            <div className="pt-1 animate-slide-up stagger-6">
+              <button
+                type="submit"
+                data-testid="register-button"
+                disabled={loading || !acceptedTerms}
+                className="ripple-btn w-full h-12 rounded-xl text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', boxShadow: '0 4px 24px rgba(124,58,237,0.4)', fontFamily: "'Space Grotesk', sans-serif" }}
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" style={{ animation: 'spin360 0.7s linear infinite' }} />
+                    Creating account…
+                  </span>
+                ) : "Create Account"}
+              </button>
+            </div>
           </form>
 
-          <p className="text-center mt-6 text-[#A1A1AA] text-sm sm:text-base">
+          <p className="text-center mt-5 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
             Already have an account?{" "}
-            <button
-              onClick={() => navigate("/login")}
-              className="text-[#7000FF] hover:text-[#9D4DFF] font-semibold transition-colors"
-            >
+            <button onClick={() => navigate("/login")} className="font-semibold" style={{ color: '#a78bfa' }}
+              onMouseEnter={e => e.target.style.color = '#c4b5fd'}
+              onMouseLeave={e => e.target.style.color = '#a78bfa'}>
               Sign In
             </button>
           </p>

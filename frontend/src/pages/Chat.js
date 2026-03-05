@@ -529,17 +529,17 @@ export default function Chat() {
     );
 
   return (
-    <div className="h-screen flex flex-col md:flex-row overflow-hidden" style={{background: 'linear-gradient(135deg, #07070f 0%, #0d0d1a 100%)'}}>
+    <div className="h-screen flex flex-col md:flex-row overflow-hidden bg-background">
       {/* Sidebar */}
       <div
         className={`${
           selectedConversation ? "hidden md:flex" : "flex"
-        } w-full md:w-80 flex-col h-full relative z-10`}
-        style={{ background: 'rgba(10,10,20,0.92)', borderRight: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)' }}
+        } w-full md:w-80 flex-col h-full relative z-10 bg-card border-r border-border`}
+        style={{ backdropFilter: 'blur(24px)' }}
       >
         {/* Sidebar top gradient orb */}
-        <div className="absolute top-0 left-0 right-0 h-48 pointer-events-none" style={{background: 'radial-gradient(ellipse at 50% -20%, rgba(109,40,217,0.18) 0%, transparent 70%)'}} />
-        <div className="p-4 border-b relative" style={{borderColor: 'rgba(255,255,255,0.06)'}}>
+        <div className="absolute top-0 left-0 right-0 h-48 pointer-events-none" style={{background: 'radial-gradient(ellipse at 50% -20%, rgba(109,40,217,0.15) 0%, transparent 70%)'}} />
+        <div className="p-4 border-b border-border relative">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background: 'linear-gradient(135deg, #7c3aed, #4f46e5)'}}>
@@ -570,17 +570,16 @@ export default function Chat() {
               placeholder={t("search_placeholder")}
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); searchUsers(e.target.value); }}
-              className="pl-9 pr-4 rounded-full h-9 text-foreground border-0 text-sm"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+              className="pl-9 pr-4 rounded-full h-9 text-foreground text-sm bg-muted border border-border"
             />
           </div>
           {searchResults.length > 0 && (
-            <div className="mt-2 rounded-xl overflow-hidden" style={{ background: 'rgba(15,15,28,0.95)', border: '1px solid rgba(255,255,255,0.08)', maxHeight: '12rem', overflowY: 'auto' }}>
+            <div className="mt-2 rounded-xl overflow-hidden bg-popover border border-border" style={{ maxHeight: '12rem', overflowY: 'auto' }}>
               {searchResults.map((u) => (
                 <div
                   key={u.user_id}
                   onClick={() => createOrOpenConversation(u.user_id)}
-                  className="p-3 hover:bg-white/5 cursor-pointer flex items-center gap-3 transition-colors"
+                  className="p-3 hover:bg-accent cursor-pointer flex items-center gap-3 transition-colors"
                 >
                   <Avatar className="h-8 w-8 ring-1" style={{ringColor:'rgba(139,92,246,0.3)'}}>
                     <AvatarImage src={u.profile_photo} />
@@ -600,12 +599,11 @@ export default function Chat() {
             <div
               key={c.conversation_id}
               onClick={() => setSelectedConversation(c)}
-              className={`conv-row group p-4 border-b cursor-pointer relative ${
+              className={`conv-row group p-4 border-b border-border cursor-pointer relative text-foreground ${
                 selectedConversation?.conversation_id === c.conversation_id
-                  ? "active bg-white/[0.04]"
-                  : "hover:bg-white/[0.03]"
+                  ? "active"
+                  : ""
               }`}
-              style={{ borderColor: 'rgba(255,255,255,0.05)', transition: 'background 0.18s' }}
             >
               <div className="flex items-center gap-3">
                 <div className="relative flex-shrink-0">
@@ -667,11 +665,11 @@ export default function Chat() {
           className={`${
             !selectedConversation ? "hidden md:flex" : "flex"
           } flex-1 flex-col h-full relative`}
-          style={currentThemeData?.bgStyle || { background: 'linear-gradient(180deg, rgba(10,10,18,1) 0%, rgba(8,8,15,1) 100%)' }}
+          style={currentThemeData?.bgStyle || undefined}
         >
           {/* Chat Header */}
-          <div className="p-3 md:p-4 flex justify-between items-center z-10 flex-shrink-0"
-            style={{ background: 'rgba(10,10,20,0.88)', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)' }}
+          <div className="p-3 md:p-4 flex justify-between items-center z-10 flex-shrink-0 bg-card border-b border-border"
+            style={{ backdropFilter: 'blur(20px)' }}
           >
             <div className="flex items-center gap-3">
               <Button
@@ -685,18 +683,18 @@ export default function Chat() {
                 <div className="rounded-full p-[2px]" style={{background: 'linear-gradient(135deg,#7c3aed,#4f46e5)'}}>
                   <Avatar className="h-9 w-9">
                     <AvatarImage src={selectedConversation.other_user?.profile_photo} />
-                    <AvatarFallback style={{background:'#0d0d1a',color:'white',fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
+                    <AvatarFallback style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)',color:'white',fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
                       {selectedConversation.other_user?.username?.[0]?.toUpperCase() ?? "?"}
                     </AvatarFallback>
                   </Avatar>
                 </div>
                 {isUserOnline(selectedConversation.other_user?.user_id) && (
-                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 online-badge" style={{background:'#22c55e', borderColor:'rgba(10,10,20,1)'}} />
+                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 online-badge" style={{background:'#22c55e', borderColor:'hsl(var(--card))'}} />
                 )}
               </div>
               <div>
                 <h3 className="font-bold text-foreground text-sm">{selectedConversation.other_user?.real_name}</h3>
-                <span className="text-xs" style={{color: isUserOnline(selectedConversation.other_user?.user_id) ? '#22c55e' : 'rgba(255,255,255,0.35)'}}>
+                <span className={`text-xs ${isUserOnline(selectedConversation.other_user?.user_id) ? 'text-green-500' : 'text-muted-foreground'}`}>
                   {isUserOnline(selectedConversation.other_user?.user_id) ? t("online") : t("offline")}
                 </span>
               </div>
@@ -712,7 +710,7 @@ export default function Chat() {
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="icon" className="icon-btn-hover text-muted-foreground h-8 w-8"><Calendar size={17} /></Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80 p-4" style={{background:'rgba(14,14,26,0.97)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                <PopoverContent className="w-80 p-4 bg-popover border border-border">
                   <h4 className="text-foreground font-semibold mb-3 text-sm">Search by Date</h4>
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
@@ -728,7 +726,7 @@ export default function Chat() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="icon-btn-hover text-muted-foreground h-8 w-8"><MoreVertical size={17} /></Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 text-foreground" style={{background:'rgba(14,14,26,0.97)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                <DropdownMenuContent align="end" className="w-48 text-foreground bg-popover border border-border">
                   <DropdownMenuItem onClick={clearChat} className="text-destructive cursor-pointer text-sm">
                     <Eraser className="mr-2 h-4 w-4" /><span>{t("clear_chat")}</span>
                   </DropdownMenuItem>
@@ -808,7 +806,7 @@ export default function Chat() {
             <div ref={messagesEndRef} />
           </div>
           {/* Input Bar */}
-          <div className="p-3 flex-shrink-0" style={{background:'rgba(10,10,20,0.9)', borderTop:'1px solid rgba(255,255,255,0.06)', backdropFilter:'blur(20px)'}}>
+          <div className="p-3 flex-shrink-0 bg-card border-t border-border" style={{ backdropFilter:'blur(20px)' }}>
             {isCurrentChatBlocked ? (
               <div className="w-full text-center p-3 text-sm font-medium rounded-xl" style={{background:'rgba(239,68,68,0.1)', color:'#f87171', border:'1px solid rgba(239,68,68,0.2)'}}>
                 You have blocked this user. Unblock to send messages.
@@ -876,10 +874,7 @@ export default function Chat() {
                     }}
                     onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                     placeholder={isRecording ? "Recording…" : t("type_message")}
-                    className="flex-1 rounded-full text-foreground text-sm border-0 h-10"
-                    style={{background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)', transition:'border-color 0.2s, box-shadow 0.2s'}}
-                    onFocus={e => { e.target.style.borderColor='rgba(139,92,246,0.5)'; e.target.style.boxShadow='0 0 0 3px rgba(139,92,246,0.1)'; }}
-                    onBlur={e  => { e.target.style.borderColor='rgba(255,255,255,0.08)'; e.target.style.boxShadow='none'; }}
+                    className="flex-1 rounded-full text-foreground text-sm h-10 bg-muted border border-border"
                     disabled={isRecording}
                   />
                   <button
@@ -896,8 +891,7 @@ export default function Chat() {
           </div>
         </div>
       ) : (
-        <div className="hidden md:flex flex-1 items-center justify-center relative overflow-hidden"
-          style={{background:'linear-gradient(180deg, rgba(9,9,17,1) 0%, rgba(7,7,14,1) 100%)'}}>
+        <div className="hidden md:flex flex-1 items-center justify-center bg-background relative overflow-hidden">
           {/* Decorative orbs */}
           <div className="absolute w-96 h-96 rounded-full pointer-events-none animate-orb-float"
             style={{background:'radial-gradient(circle, rgba(109,40,217,0.12) 0%, transparent 70%)', top:'10%', left:'20%'}} />
