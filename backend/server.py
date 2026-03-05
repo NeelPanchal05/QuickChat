@@ -431,6 +431,7 @@ async def save_attachment_message(
     content: str = Body(...), 
     message_type: str = Body(...), 
     file_name: str = Body(default=None),
+    temp_id: Optional[str] = Body(default=None),
     current_user: dict = Depends(get_current_user)
 ):
     is_spam, reason = spam_protection.check_spam(current_user['user_id'])
@@ -456,6 +457,8 @@ async def save_attachment_message(
     response_doc = doc.copy()
     response_doc['content'] = content
     response_doc.pop('_id', None)
+    if temp_id:
+        response_doc['temp_id'] = temp_id
     await sio.emit('new_message', response_doc, room=conversation_id)
     
     return {k: v for k, v in doc.items() if k != '_id'}
@@ -614,6 +617,9 @@ async def handle_message(sid, data):
     response_doc = doc.copy()
     response_doc['content'] = content
     response_doc.pop('_id', None)
+    temp_id = data.get('temp_id')
+    if temp_id:
+        response_doc['temp_id'] = temp_id
     
     await sio.emit('new_message', response_doc, room=doc['conversation_id'])
 

@@ -248,7 +248,7 @@ export default function Chat() {
   };
 
   const addOptimisticMessage = (content, type, fileName = null) => {
-    if (!user) return;
+    if (!user) return null;
     const tempId = `temp_${Date.now()}_${Math.random()}`;
     const optimisticMsg = {
       message_id: tempId,
@@ -278,6 +278,8 @@ export default function Chat() {
         (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
       );
     });
+
+    return tempId;
   };
 
   const startRecording = async () => {
@@ -303,7 +305,7 @@ export default function Chat() {
         reader.onloadend = async () => {
           const base64data = reader.result;
 
-          addOptimisticMessage(base64data, "audio/webm", "voice_message.webm");
+          const tempId = addOptimisticMessage(base64data, "audio/webm", "voice_message.webm");
 
           try {
             await axios.post(
@@ -312,6 +314,7 @@ export default function Chat() {
                 content: base64data,
                 message_type: "audio/webm",
                 file_name: "voice_message.webm",
+                temp_id: tempId,
               },
               { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -348,6 +351,16 @@ export default function Chat() {
       const currentConv = selectedConversationRef.current;
 
       setMessages((prev) => {
+        // If the server echoed back a temp_id, swap the optimistic placeholder
+        if (msg.temp_id) {
+          const idx = prev.findIndex((m) => m.message_id === msg.temp_id);
+          if (idx !== -1) {
+            const next = [...prev];
+            next[idx] = { ...msg };
+            return next;
+          }
+        }
+        // Deduplicate by real message_id
         if (prev.some((m) => m.message_id === msg.message_id)) return prev;
         return [...prev, msg];
       });
@@ -442,21 +455,22 @@ export default function Chat() {
     }
 
     if (messageInput.trim()) {
-      addOptimisticMessage(messageInput, "text");
+      const tempId = addOptimisticMessage(messageInput, "text");
       socket?.emit("send_message", {
         conversation_id: selectedConversation.conversation_id,
         content: messageInput,
         message_type: "text",
+        temp_id: tempId,
       });
     }
 
     for (const file of attachedFiles) {
-      addOptimisticMessage(file.data, file.type, file.name);
+      const tempId = addOptimisticMessage(file.data, file.type, file.name);
 
       try {
         await axios.post(
           `${API}/conversations/${selectedConversation.conversation_id}/messages`,
-          { content: file.data, message_type: file.type, file_name: file.name },
+          { content: file.data, message_type: file.type, file_name: file.name, temp_id: tempId },
           { headers: { Authorization: `Bearer ${token}` } }
         );
       } catch (error) {
@@ -479,11 +493,12 @@ export default function Chat() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const locationUrl = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-        addOptimisticMessage(locationUrl, "location");
+        const tempId = addOptimisticMessage(locationUrl, "location");
         socket?.emit("send_message", {
           conversation_id: selectedConversation.conversation_id,
           content: locationUrl,
           message_type: "location",
+          temp_id: tempId,
         });
       },
       () => toast.error("Unable to retrieve location")
