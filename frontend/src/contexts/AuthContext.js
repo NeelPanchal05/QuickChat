@@ -10,7 +10,17 @@ import io from "socket.io-client";
 const AuthContext = createContext(null);
 
 // Use environment variable for backend URL, defaulting to localhost for development
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+let BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+
+// If the configured URL evaluates to localhost, but the browser is NOT on localhost,
+// rewrite it to use the browser's current hostname so mobile devices can connect.
+if (
+  BACKEND_URL.includes("localhost") &&
+  window.location.hostname !== "localhost" &&
+  window.location.hostname !== "127.0.0.1"
+) {
+  BACKEND_URL = BACKEND_URL.replace("localhost", window.location.hostname);
+}
 const API = `${BACKEND_URL}/api`;
 
 export const AuthProvider = ({ children }) => {
