@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }) => {
           console.error("Failed to fetch user, status:", response.status);
         }
       } catch (error) {
-        console.error("Error fetching user:", error);
+        console.error("Error fetching user:", error instanceof Error ? error.message : String(error));
         // Network errors or timeout: do NOT logout — backend may be temporarily unreachable
         if (error.name === 'AbortError') {
           console.error("Request timeout - backend may not be running");
@@ -92,7 +92,7 @@ export const AuthProvider = ({ children }) => {
       });
 
       newSocket.on("connect_error", (err) => {
-        console.error("Socket connection error:", err);
+        console.error("Socket connection error:", err instanceof Error ? err.message : String(err));
       });
 
       setSocket(newSocket);
@@ -129,7 +129,7 @@ export const AuthProvider = ({ children }) => {
       await fetchUser(data.token);
       return data;
     } catch (err) {
-      console.error("Login error:", err);
+      console.error("Login error:", err instanceof Error ? err.message : String(err));
       throw err;
     }
   };
@@ -172,7 +172,7 @@ export const AuthProvider = ({ children }) => {
       await fetchUser(data.token);
       return data;
     } catch (err) {
-      console.error("OTP Error:", err);
+      console.error("OTP Error:", err instanceof Error ? err.message : String(err));
       throw err;
     }
   };
