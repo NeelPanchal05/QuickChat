@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSound } from "@/contexts/SoundContext";
@@ -528,6 +528,132 @@ export default function Chat() {
       selectedConversation.other_user?.user_id
     );
 
+  const memoizedConversations = useMemo(() => {
+    return conversations.map((c) => (
+      <div
+        key={c.conversation_id}
+        onClick={() => setSelectedConversation(c)}
+        className={`conv-row group p-4 border-b border-border cursor-pointer relative text-foreground ${
+          selectedConversation?.conversation_id === c.conversation_id
+            ? "active"
+            : ""
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <div className="relative flex-shrink-0">
+            <Avatar className="h-11 w-11 ring-2" style={{ringColor: selectedConversation?.conversation_id === c.conversation_id ? 'rgba(139,92,246,0.5)' : 'transparent'}}>
+              <AvatarImage src={c.other_user?.profile_photo} />
+              <AvatarFallback style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)',color:'white',fontFamily:"'Space Grotesk',sans-serif",fontWeight:700}}>{c.other_user?.username?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
+            </Avatar>
+            {isUserOnline(c.other_user?.user_id) && (
+              <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 online-badge" style={{background:'#22c55e', borderColor:'rgba(10,10,20,1)'}} />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-sm text-foreground truncate">
+                {c.other_user?.real_name}
+              </span>
+              {c.is_pinned && <Pin size={11} className="text-violet-400 flex-shrink-0" />}
+            </div>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {c.last_message?.content
+                ? c.last_message.content.length > 32
+                  ? c.last_message.content.substring(0, 32) + "…"
+                  : c.last_message.content
+                : t("start_chatting")}
+            </p>
+          </div>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                  <MoreVertical size={14} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40" style={{background:'rgba(14,14,26,0.97)',border:'1px solid rgba(255,255,255,0.08)'}}>
+                <DropdownMenuItem
+                  onClick={(e) => blockUser(e, c.other_user?.user_id)}
+                  className="text-destructive focus:text-destructive cursor-pointer text-xs"
+                >
+                  <UserX size={13} className="mr-2" /> Block User
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => deleteConversation(e, c.conversation_id)}
+                  className="text-destructive focus:text-destructive cursor-pointer text-xs"
+                >
+                  <Trash2 size={13} className="mr-2" /> Delete Chat
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div>
+    ));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations, selectedConversation, onlineUsers, t]);
+
+  const memoizedMessages = useMemo(() => {
+    return messages.map((m, i) => {
+      const isOwn = user && m.sender_id === user.user_id;
+
+      if (m.message_type === "poll") return null;
+
+      return (
+        <div
+          key={m.message_id}
+          className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-message-in`}
+          style={{ animationDelay: `${Math.min(i * 0.02, 0.3)}s` }}
+        >
+          <div
+            className={`max-w-[72%] px-4 py-2.5 rounded-2xl ${
+              isOwn
+                ? "bubble-own text-white rounded-tr-sm"
+                : "bubble-other text-foreground rounded-tl-sm"
+            }`}
+          >
+            {m.message_type === "text" && (
+              <p className="text-sm leading-relaxed break-words">{m.content}</p>
+            )}
+            {m.message_type === "location" && (
+              <a
+                href={m.content}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-inherit text-sm underline underline-offset-2"
+              >
+                <MapPin size={14} /> {t("view_location")}
+              </a>
+            )}
+            {m.message_type === "image" && (
+              <img src={m.content} alt="attachment" className="rounded-xl max-h-60 object-cover" />
+            )}
+            {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
+              <video controls src={m.content} className="max-w-full rounded-xl" />
+            )}
+            {m.message_type &&
+              !["text", "location", "image", "poll"].includes(m.message_type) &&
+              !["audio", "video"].includes(m.message_type.split("/")[0]) && (
+              <div className="flex items-center gap-2 text-sm">
+                <Paperclip size={14} />
+                <span className="underline underline-offset-2">{m.file_name || t("attached_file")}</span>
+              </div>
+            )}
+            <div className="flex justify-end items-center mt-1 gap-1.5">
+              <span className="text-[10px]" style={{opacity: 0.55}}>
+                {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              {isOwn && (
+                <MessageReadStatus status={m.read_by?.length > 1 ? "read" : "sent"} />
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, user, t]);
+
   return (
     <div className="h-screen flex flex-col md:flex-row overflow-hidden bg-background">
       {/* Sidebar */}
@@ -595,67 +721,7 @@ export default function Chat() {
           )}
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {conversations.map((c) => (
-            <div
-              key={c.conversation_id}
-              onClick={() => setSelectedConversation(c)}
-              className={`conv-row group p-4 border-b border-border cursor-pointer relative text-foreground ${
-                selectedConversation?.conversation_id === c.conversation_id
-                  ? "active"
-                  : ""
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="relative flex-shrink-0">
-                  <Avatar className="h-11 w-11 ring-2" style={{ringColor: selectedConversation?.conversation_id === c.conversation_id ? 'rgba(139,92,246,0.5)' : 'transparent'}}>
-                    <AvatarImage src={c.other_user?.profile_photo} />
-                    <AvatarFallback style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)',color:'white',fontFamily:"'Space Grotesk',sans-serif",fontWeight:700}}>{c.other_user?.username?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
-                  </Avatar>
-                  {isUserOnline(c.other_user?.user_id) && (
-                    <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 online-badge" style={{background:'#22c55e', borderColor:'rgba(10,10,20,1)'}} />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-sm text-foreground truncate">
-                      {c.other_user?.real_name}
-                    </span>
-                    {c.is_pinned && <Pin size={11} className="text-violet-400 flex-shrink-0" />}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {c.last_message?.content
-                      ? c.last_message.content.length > 32
-                        ? c.last_message.content.substring(0, 32) + "…"
-                        : c.last_message.content
-                      : t("start_chatting")}
-                  </p>
-                </div>
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                        <MoreVertical size={14} />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40" style={{background:'rgba(14,14,26,0.97)',border:'1px solid rgba(255,255,255,0.08)'}}>
-                      <DropdownMenuItem
-                        onClick={(e) => blockUser(e, c.other_user?.user_id)}
-                        className="text-destructive focus:text-destructive cursor-pointer text-xs"
-                      >
-                        <UserX size={13} className="mr-2" /> Block User
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e) => deleteConversation(e, c.conversation_id)}
-                        className="text-destructive focus:text-destructive cursor-pointer text-xs"
-                      >
-                        <Trash2 size={13} className="mr-2" /> Delete Chat
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </div>
-          ))}
+          {memoizedConversations}
         </div>
       </div>
 
@@ -736,63 +802,7 @@ export default function Chat() {
           </div>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-            {messages.map((m, i) => {
-              const isOwn = user && m.sender_id === user.user_id;
-
-              if (m.message_type === "poll") return null;
-
-              return (
-                <div
-                  key={m.message_id}
-                  className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-message-in`}
-                  style={{ animationDelay: `${Math.min(i * 0.02, 0.3)}s` }}
-                >
-                  <div
-                    className={`max-w-[72%] px-4 py-2.5 rounded-2xl ${
-                      isOwn
-                        ? "bubble-own text-white rounded-tr-sm"
-                        : "bubble-other text-foreground rounded-tl-sm"
-                    }`}
-                  >
-                    {m.message_type === "text" && (
-                      <p className="text-sm leading-relaxed break-words">{m.content}</p>
-                    )}
-                    {m.message_type === "location" && (
-                      <a
-                        href={m.content}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-inherit text-sm underline underline-offset-2"
-                      >
-                        <MapPin size={14} /> {t("view_location")}
-                      </a>
-                    )}
-                    {m.message_type === "image" && (
-                      <img src={m.content} alt="attachment" className="rounded-xl max-h-60 object-cover" />
-                    )}
-                    {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
-                      <video controls src={m.content} className="max-w-full rounded-xl" />
-                    )}
-                    {m.message_type &&
-                      !["text", "location", "image", "poll"].includes(m.message_type) &&
-                      !["audio", "video"].includes(m.message_type.split("/")[0]) && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Paperclip size={14} />
-                        <span className="underline underline-offset-2">{m.file_name || t("attached_file")}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-end items-center mt-1 gap-1.5">
-                      <span className="text-[10px]" style={{opacity: 0.55}}>
-                        {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                      {isOwn && (
-                        <MessageReadStatus status={m.read_by?.length > 1 ? "read" : "sent"} />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {memoizedMessages}
             {/* Typing indicator */}
             {typing && (
               <div className="flex justify-start animate-fade-up">
