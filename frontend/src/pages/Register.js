@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -42,14 +42,8 @@ export default function Register() {
     }
   };
 
-  return (
-    <div
-      className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden"
-      style={{
-        backgroundImage: "url(https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85)",
-        backgroundSize: "cover", backgroundPosition: "center",
-      }}
-    >
+  const memoizedBackground = useMemo(() => (
+    <>
       {/* Overlay */}
       <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(7,7,15,0.9) 0%, rgba(30,0,60,0.78) 100%)', backdropFilter: 'blur(4px)' }} />
 
@@ -58,6 +52,18 @@ export default function Register() {
         style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)', filter: 'blur(50px)' }} />
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 70%)', filter: 'blur(60px)', animation: 'orbFloat 12s ease-in-out infinite reverse' }} />
+    </>
+  ), []);
+
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden"
+      style={{
+        backgroundImage: "url(https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85)",
+        backgroundSize: "cover", backgroundPosition: "center",
+      }}
+    >
+      {memoizedBackground}
 
       <div
         className="relative z-10 w-full max-w-md"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,19 @@ export default function Login() {
     }
   };
 
+  const memoizedBackground = useMemo(() => (
+    <>
+      {/* Animated overlay */}
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(7,7,15,0.88) 0%, rgba(30,0,60,0.75) 100%)', backdropFilter: 'blur(4px)' }} />
+
+      {/* Floating orbs */}
+      <div className="absolute top-1/4 left-1/4 w-72 h-72 rounded-full pointer-events-none animate-orb-float"
+        style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 70%)', filter: 'blur(40px)' }} />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full pointer-events-none"
+        style={{ background: 'radial-gradient(circle, rgba(79,70,229,0.12) 0%, transparent 70%)', filter: 'blur(60px)', animation: 'orbFloat 11s ease-in-out infinite reverse' }} />
+    </>
+  ), []);
+
   return (
     <div
       className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden"
@@ -44,14 +57,7 @@ export default function Login() {
         backgroundPosition: "center",
       }}
     >
-      {/* Animated overlay */}
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(7,7,15,0.88) 0%, rgba(30,0,60,0.75) 100%)', backdropFilter: 'blur(4px)' }} />
-
-      {/* Floating orbs */}
-      <div className="absolute top-1/4 left-1/4 w-72 h-72 rounded-full pointer-events-none animate-orb-float"
-        style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 70%)', filter: 'blur(40px)' }} />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(79,70,229,0.12) 0%, transparent 70%)', filter: 'blur(60px)', animation: 'orbFloat 11s ease-in-out infinite reverse' }} />
+      {memoizedBackground}
 
       {/* Card */}
       <div
