@@ -71,6 +71,8 @@ export default function Chat() {
     setCallData,
     addOptimisticMessage,
     fetchConversations,
+    setDownloadProgress,
+    clearDownloadProgress,
   } = useChat();
 
   // UI States
@@ -226,13 +228,42 @@ export default function Chat() {
 
 
 
-  const downloadFile = (dataUrl, fileName) => {
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = fileName || "download";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadFile = async (dataUrl, fileName, messageId) => {
+    // If it's a blob/data URI we can just download it directly
+    if (dataUrl.startsWith("data:") || dataUrl.startsWith("blob:")) {
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = fileName || "download";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
+
+    // If it's an external URL (e.g CDN in Phase 13), fetch it with Axios to track download progress
+    if (messageId) setDownloadProgress(messageId, 0);
+    try {
+      const response = await axios.get(dataUrl, {
+        responseType: 'blob',
+        onDownloadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            if (messageId) setDownloadProgress(messageId, percentCompleted);
+          }
+        }
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName || 'download');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e) {
+      toast.error(`Failed to download ${fileName}`);
+    } finally {
+      if (messageId) setTimeout(() => clearDownloadProgress(messageId), 500);
+    }
   };
   
   const memoizedMessages = messages;

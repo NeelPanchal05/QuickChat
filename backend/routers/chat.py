@@ -11,6 +11,7 @@ from encryption import encrypt_message, decrypt_message
 from socket_instance import sio, active_users
 from push_service import send_push_notification
 from rate_limiter import limiter
+from cloudinary_utils import upload_to_cdn, is_cdn_enabled
 
 router = APIRouter(prefix="/api", tags=["Chat"])
 
@@ -121,7 +122,23 @@ async def save_attachment_message(
     if is_spam:
         raise HTTPException(status_code=429, detail=reason)
 
-    encrypted_content = encrypt_message(content) if content else ''
+    # ---- CDN Upload (Phase 13) -------------------------------------------
+    # If Cloudinary is configured, upload media to CDN and store the URL.
+    # The content going into the DB is either a CDN URL or the original (encrypted) data URI.
+    stored_content = content
+    is_media_type = message_type and message_type not in ("text", "location", "poll")
+    
+    if is_media_type and is_cdn_enabled() and content.startswith("data:"):
+        # Content at this point is already E2EE-encrypted on the frontend.
+        # We decode it to get the original data URI and upload to CDN.
+        # Note: If E2EE is enabled, we're uploading the encrypted ciphertext as a binary blob.
+        # The CDN URL is safe to expose because only users with the correct key can decrypt.
+        cdn_url = await upload_to_cdn(content, file_name=file_name)
+        if cdn_url:
+            stored_content = cdn_url  # Replace data URI with CDN URL
+    # ---- End CDN Upload ----------------------------------------------------
+
+    encrypted_content = encrypt_message(stored_content) if stored_content else ''
     
     msg_id = f"msg_{datetime.now(timezone.utc).timestamp()}".replace('.', '_')
     doc = {
@@ -140,7 +157,7 @@ async def save_attachment_message(
     await db.conversations.update_one({'conversation_id': conversation_id}, {'$set': {'updated_at': doc['timestamp']}})
     
     response_doc = doc.copy()
-    response_doc['content'] = content
+    response_doc['content'] = stored_content  # Return stored content (URL or original data)
     response_doc.pop('_id', None)
     if temp_id:
         response_doc['temp_id'] = temp_id

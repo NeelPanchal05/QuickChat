@@ -22,6 +22,23 @@ import {
 import MessageInput from "@/components/MessageInput";
 import { Virtuoso } from "react-virtuoso";
 
+const formatMessageDate = (timestamp, t) => {
+  if (!timestamp) return "";
+  const date = new Date(timestamp);
+  const now = new Date();
+  
+  const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+
+  if (isToday) return typeof t === 'function' ? (t("today") || "Today") : "Today";
+  if (isYesterday) return typeof t === 'function' ? (t("yesterday") || "Yesterday") : "Yesterday";
+  
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+};
+
 export default function ChatWindow({
   startCall,
   dateSearch,
@@ -44,7 +61,9 @@ export default function ChatWindow({
     hasMoreMessages,
     messages,
     isLoadingMessages,
-    setReplyingTo
+    setReplyingTo,
+    uploadProgress,
+    downloadProgress
   } = useChat();
 
   const isUserOnline = (userId) => onlineUsers.has(userId);
@@ -186,8 +205,19 @@ export default function ChatWindow({
             const repliedMessage = m.reply_to ? messages.find(msg => msg.message_id === m.reply_to) : null;
             const decryptedRepliedContent = repliedMessage ? decryptMessage(repliedMessage.content, myPrivateKey, theirPublicKey) : null;
 
+            const currentDate = formatMessageDate(m.timestamp, t);
+            const prevDate = index > 0 ? formatMessageDate(messages[index - 1].timestamp, t) : null;
+            const showDateSeparator = currentDate !== prevDate;
+
             return (
               <div className="py-1">
+                {showDateSeparator && (
+                  <div className="flex w-full justify-center my-5 mb-6 relative z-10 pointer-events-none">
+                    <span className="bg-black/50 backdrop-blur-md border border-white/10 text-white/90 text-[11px] py-1 px-4 rounded-full shadow-sm font-medium tracking-wide">
+                      {currentDate}
+                    </span>
+                  </div>
+                )}
                 <div className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-message-in group`}>
                   <div className={`flex flex-col max-w-[72%] ${isOwn ? 'items-end' : 'items-start'}`}>
                     
@@ -208,39 +238,104 @@ export default function ChatWindow({
                         href={decryptedContent}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-inherit text-sm underline underline-offset-2"
+                        className="group flex flex-col items-center justify-center p-4 rounded-xl text-inherit no-underline transition-all"
+                        style={{
+                          background: isOwn ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.05)',
+                          border: isOwn ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.08)'
+                        }}
                       >
-                        <MapPin size={14} /> {t("view_location")}
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-2" 
+                          style={{ background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(124,58,237,0.15)' }}
+                        >
+                          <MapPin size={24} className={isOwn ? 'text-white' : 'text-primary'} />
+                        </div>
+                        <span className="text-sm font-semibold mb-0.5">{t("view_location")}</span>
+                        <span className="text-xs opacity-70 underline underline-offset-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-[180px]">
+                          {decryptedContent}
+                        </span>
                       </a>
                     )}
-                    {m.message_type === "image" && (
-                      <div className="relative group overflow-hidden rounded-xl">
+                    {m.message_type?.startsWith("image") && (
+                      <div className="relative group overflow-hidden rounded-xl min-h-[60px] min-w-[100px] bg-black/10">
                         <img src={decryptedContent} alt="attachment" className="w-full max-h-60 object-cover" />
                         <button
-                          onClick={() => downloadFile(decryptedContent, m.file_name || "image")}
-                          className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={() => downloadFile(decryptedContent, m.file_name || "image", m.message_id)}
+                          className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all z-10"
                           title="Download Image"
                         >
                           <Download size={14} />
                         </button>
+                        {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
+                          <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center backdrop-blur-sm z-20 transition-all duration-300">
+                            <div className="w-12 h-12 relative flex items-center justify-center">
+                              <svg className="w-full h-full transform -rotate-90">
+                                <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
+                                <circle cx="24" cy="24" r="20" stroke="white" strokeWidth="3" fill="none" 
+                                  strokeDasharray="125.6" 
+                                  strokeDashoffset={125.6 - (125.6 * (uploadProgress[m.message_id] ?? downloadProgress[m.message_id])) / 100} 
+                                  className="transition-all duration-150 ease-out" />
+                              </svg>
+                              <span className="absolute text-white text-[10px] font-bold">{uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
-                      <div>
-                        <video controls src={decryptedContent} className="max-w-full rounded-xl" />
+                      <div className="relative group overflow-hidden rounded-xl min-h-[60px] min-w-[200px] bg-black/10">
+                        <video controls src={decryptedContent} className="max-w-full rounded-xl relative z-10" />
+                        {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
+                          <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center backdrop-blur-sm z-20 transition-all duration-300 rounded-xl">
+                            <div className="w-12 h-12 relative flex items-center justify-center">
+                              <svg className="w-full h-full transform -rotate-90">
+                                <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
+                                <circle cx="24" cy="24" r="20" stroke="white" strokeWidth="3" fill="none" 
+                                  strokeDasharray="125.6" 
+                                  strokeDashoffset={125.6 - (125.6 * (uploadProgress[m.message_id] ?? downloadProgress[m.message_id])) / 100} 
+                                  className="transition-all duration-150 ease-out" />
+                              </svg>
+                              <span className="absolute text-white text-[10px] font-bold">{uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     {m.message_type &&
-                      !["text", "location", "image", "poll"].includes(m.message_type) &&
-                      !["audio", "video"].includes(m.message_type.split("/")[0]) && (
+                      !["text", "location", "poll"].includes(m.message_type) &&
+                      !["image", "audio", "video"].includes(m.message_type.split("/")[0]) && (
                       <button
-                        onClick={() => downloadFile(decryptedContent, m.file_name)}
-                        className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity"
-                        title="Download file"
+                        onClick={() => downloadFile(decryptedContent, m.file_name, m.message_id)}
+                        className="group relative flex items-center gap-3 p-3 rounded-xl transition-all text-left max-w-[260px] md:max-w-sm overflow-hidden"
+                        style={{
+                          background: isOwn ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.05)',
+                          border: isOwn ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.08)'
+                        }}
+                        title="Download Document"
                       >
-                        <Paperclip size={14} />
-                        <span className="underline underline-offset-2">{m.file_name || t("attached_file")}</span>
-                        <Download size={13} className="ml-1 opacity-70" />
+                        {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
+                          <div 
+                            className="absolute left-0 top-0 bottom-0 bg-white/10 transition-all duration-300" 
+                            style={{width: `${uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}%`}}
+                          />
+                        )}
+                        <div className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center relative z-10"
+                          style={{ background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(124,58,237,0.15)' }}
+                        >
+                          <Paperclip size={20} className={isOwn ? 'text-white' : 'text-primary'} />
+                        </div>
+                        <div className="flex-1 min-w-0 relative z-10">
+                          <p className="text-sm font-medium truncate mb-0.5">{m.file_name || "Document.pdf"}</p>
+                          <p className="text-[10px] opacity-70 uppercase tracking-wider truncate">
+                            {uploadProgress[m.message_id] !== undefined 
+                              ? `Uploading... ${uploadProgress[m.message_id]}%` 
+                              : downloadProgress[m.message_id] !== undefined
+                                ? `Downloading... ${downloadProgress[m.message_id]}%`
+                                : m.message_type.split("/").pop()}
+                          </p>
+                        </div>
+                        {(uploadProgress[m.message_id] === undefined && downloadProgress[m.message_id] === undefined) && (
+                          <Download size={16} className="opacity-0 group-hover:opacity-100 transition-all shrink-0 ml-1 relative z-10" />
+                        )}
                       </button>
                     )}
                     <div className="flex justify-end items-center mt-1 gap-1.5">

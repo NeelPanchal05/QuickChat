@@ -14,7 +14,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
   const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
   const { t } = useLanguage();
   const { user, socket, API, token } = useAuth();
-  const { selectedConversation, addOptimisticMessage, replyingTo, setReplyingTo } = useChat();
+  const { selectedConversation, addOptimisticMessage, replyingTo, setReplyingTo, setUploadProgress, clearUploadProgress } = useChat();
 
   const [messageInput, setMessageInput] = useState("");
   const [attachedFiles, setAttachedFiles] = useState([]);
@@ -107,13 +107,23 @@ export default function MessageInput({ isCurrentChatBlocked }) {
       const encryptedFileContent = encryptMessage(file.data, myPrivateKey, theirPublicKey);
 
       try {
+        setUploadProgress(tempId, 0);
         await axios.post(
           `${API}/conversations/${selectedConversation.conversation_id}/messages`,
           { content: encryptedFileContent, message_type: file.type, file_name: file.name, temp_id: tempId, reply_to: replyingTo?.message_id },
-          { headers: { Authorization: `Bearer ${token}` } }
+          { 
+            headers: { Authorization: `Bearer ${token}` },
+            onUploadProgress: (progressEvent) => {
+              const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setUploadProgress(tempId, percentCompleted);
+            }
+          }
         );
       } catch (error) {
         toast.error(`Failed to send ${file.name}`);
+      } finally {
+        // Clear progress slightly after completion to allow UI to animate to 100%
+        setTimeout(() => clearUploadProgress(tempId), 500);
       }
     }
 

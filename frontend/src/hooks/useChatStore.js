@@ -27,6 +27,26 @@ export const useChatStore = create((set, get) => ({
   setIsLoadingMessages: (isLoadingMessages) => set({ isLoadingMessages }),
   setHasMoreMessages: (hasMoreMessages) => set({ hasMoreMessages }),
 
+  uploadProgress: {},
+  setUploadProgress: (id, progress) => set((state) => ({
+    uploadProgress: { ...state.uploadProgress, [id]: progress }
+  })),
+  clearUploadProgress: (id) => set((state) => {
+    const newProgress = { ...state.uploadProgress };
+    delete newProgress[id];
+    return { uploadProgress: newProgress };
+  }),
+
+  downloadProgress: {},
+  setDownloadProgress: (id, progress) => set((state) => ({
+    downloadProgress: { ...state.downloadProgress, [id]: progress }
+  })),
+  clearDownloadProgress: (id) => set((state) => {
+    const newProgress = { ...state.downloadProgress };
+    delete newProgress[id];
+    return { downloadProgress: newProgress };
+  }),
+
   // Optimistic updates need access to current state
   addOptimisticMessage: (content, type, fileName = null, replyToId = null, user, selectedConv) => {
     if (!user || !selectedConv) return null;

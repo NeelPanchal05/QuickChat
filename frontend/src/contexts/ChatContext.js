@@ -42,6 +42,13 @@ export const ChatProvider = ({ children }) => {
   const setReplyingTo = useChatStore(state => state.setReplyingTo);
   const storeAddOptimisticMessage = useChatStore(state => state.addOptimisticMessage);
 
+  const uploadProgress = useChatStore(state => state.uploadProgress);
+  const setUploadProgress = useChatStore(state => state.setUploadProgress);
+  const clearUploadProgress = useChatStore(state => state.clearUploadProgress);
+  const downloadProgress = useChatStore(state => state.downloadProgress);
+  const setDownloadProgress = useChatStore(state => state.setDownloadProgress);
+  const clearDownloadProgress = useChatStore(state => state.clearDownloadProgress);
+
   const fetchConversations = useCallback(async () => {
     try {
       if (!token) return;
@@ -137,7 +144,13 @@ export const ChatProvider = ({ children }) => {
     setReplyingTo,
     fetchConversations,
     fetchMessages,
-    addOptimisticMessage
+    addOptimisticMessage,
+    uploadProgress,
+    setUploadProgress,
+    clearUploadProgress,
+    downloadProgress,
+    setDownloadProgress,
+    clearDownloadProgress
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
