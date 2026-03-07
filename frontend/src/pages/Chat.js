@@ -25,6 +25,7 @@ import {
   UserX,
   Mic,
   Square,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker from "emoji-picker-react";
@@ -219,6 +220,15 @@ export default function Chat() {
 
 
 
+  const downloadFile = (dataUrl, fileName) => {
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = fileName || "download";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const memoizedMessages = useMemo(() => {
     return messages.map((m, i) => {
       const isOwn = user && m.sender_id === user.user_id;
@@ -252,18 +262,41 @@ export default function Chat() {
               </a>
             )}
             {m.message_type === "image" && (
-              <img src={m.content} alt="attachment" className="rounded-xl max-h-60 object-cover" />
+              <div className="relative group">
+                <img src={m.content} alt="attachment" className="rounded-xl max-h-60 object-cover" />
+                <button
+                  onClick={() => downloadFile(m.content, m.file_name || "image.jpg")}
+                  className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 hover:bg-black/80 rounded-full p-1.5 text-white"
+                  title="Download image"
+                >
+                  <Download size={14} />
+                </button>
+              </div>
             )}
             {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
-              <video controls src={m.content} className="max-w-full rounded-xl" />
+              <div>
+                <video controls src={m.content} className="max-w-full rounded-xl" />
+                <button
+                  onClick={() => downloadFile(m.content, m.file_name || "video")}
+                  className="mt-1 flex items-center gap-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
+                  title="Download"
+                >
+                  <Download size={12} /> Download
+                </button>
+              </div>
             )}
             {m.message_type &&
               !["text", "location", "image", "poll"].includes(m.message_type) &&
               !["audio", "video"].includes(m.message_type.split("/")[0]) && (
-              <div className="flex items-center gap-2 text-sm">
+              <button
+                onClick={() => downloadFile(m.content, m.file_name || "file")}
+                className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity"
+                title="Download file"
+              >
                 <Paperclip size={14} />
                 <span className="underline underline-offset-2">{m.file_name || t("attached_file")}</span>
-              </div>
+                <Download size={13} className="ml-1 opacity-70" />
+              </button>
             )}
             <div className="flex justify-end items-center mt-1 gap-1.5">
               <span className="text-[10px]" style={{opacity: 0.55}}>
