@@ -42,6 +42,7 @@ import TermsAndConditions from "@/pages/TermsAndConditions";
 import ChatSidebar from "@/components/ChatSidebar";
 import ChatWindow from "@/components/ChatWindow";
 import MessageInput from "@/components/MessageInput";
+import DarkVeil from "@/components/DarkVeil";
 import {
   Dialog,
   DialogContent,
@@ -345,15 +346,22 @@ export default function Chat() {
         />
       ) : (
         <div className="hidden md:flex flex-1 items-center justify-center bg-background relative overflow-hidden">
-          {/* Decorative orbs */}
-          <div className="absolute w-96 h-96 rounded-full pointer-events-none animate-orb-float"
-            style={{background:'radial-gradient(circle, rgba(109,40,217,0.12) 0%, transparent 70%)', top:'10%', left:'20%'}} />
-          <div className="absolute w-64 h-64 rounded-full pointer-events-none"
-            style={{background:'radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%)', bottom:'15%', right:'15%', animation:'orbFloat 8s ease-in-out infinite reverse'}} />
-          <div className="text-center animate-fade-up">
+          {/* Animated Background */}
+          <div className="absolute inset-0 z-0 opacity-80 mix-blend-screen">
+            <DarkVeil
+              hueShift={0}
+              noiseIntensity={0}
+              scanlineIntensity={0}
+              speed={0.5}
+              scanlineFrequency={0}
+              warpAmount={0}
+            />
+          </div>
+          
+          <div className="text-center animate-fade-up z-10 relative pointer-events-none">
             <div
               className="w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6"
-              style={{background:'linear-gradient(135deg,rgba(124,58,237,0.2),rgba(79,70,229,0.15))', border:'1px solid rgba(139,92,246,0.2)', boxShadow:'0 0 40px rgba(124,58,237,0.15)'}}
+              style={{background:'linear-gradient(135deg,rgba(124,58,237,0.2),rgba(79,70,229,0.15))', border:'1px solid rgba(139,92,246,0.3)', boxShadow:'0 0 40px rgba(124,58,237,0.2)'}}
             >
               <MessageCircle size={44} style={{color:'#a78bfa'}} />
             </div>
