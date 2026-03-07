@@ -33,9 +33,22 @@ const ProtectedRoute = ({ children }) => {
   if (!token) return <Navigate to="/login" />;
 
   // 3. User data safety check
-  // This is CRITICAL. It prevents the Chat component from mounting
-  // until the user object is fully ready, preventing the "Black Screen".
-  if (!user) return <PageLoader />;
+  // This prevents the Chat component from mounting until the user object is fully ready.
+  // If loading is false but user is still null, it means the fetch failed (e.g. server down).
+  if (!user) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-background text-foreground space-y-4">
+        <p className="text-xl text-destructive font-semibold">Connection Error</p>
+        <p className="text-muted-foreground text-sm">Could not reach the server to load your profile.</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md shadow hover:bg-primary/90 transition-colors"
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
 
   return children;
 };
