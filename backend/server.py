@@ -4,6 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import socketio
 import logging
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from rate_limiter import limiter
+
 from database import db, client
 from socket_instance import sio, _allowed_origins
 
@@ -25,6 +29,9 @@ async def lifespan(app: FastAPI):
     logger.info('MongoDB connection closed')
 
 app = FastAPI(lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

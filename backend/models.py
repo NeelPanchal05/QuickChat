@@ -7,6 +7,7 @@ class UserRegister(BaseModel):
     password: str
     real_name: str
     unique_id: str
+    public_key: Optional[str] = None
 
 class OTPVerify(BaseModel):
     email: EmailStr
@@ -20,6 +21,7 @@ class UserUpdate(BaseModel):
     real_name: Optional[str] = None
     profile_photo: Optional[str] = None
     bio: Optional[str] = None
+    public_key: Optional[str] = None
 
 class ChangePassword(BaseModel):
     old_password: str

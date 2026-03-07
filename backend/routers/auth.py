@@ -1,18 +1,20 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response, Request
 from datetime import datetime, timedelta, timezone
 
 from database import db
 from models import UserRegister, OTPVerify, UserLogin, ChangePassword
 from utils import (
     generate_otp, hash_password, verify_password, 
-    create_access_token, send_email_func
+    create_access_token, create_refresh_token, send_email_func
 )
 from dependencies import get_current_user
+from rate_limiter import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 @router.post('/register')
-async def register(user_data: UserRegister):
+@limiter.limit("5/minute")
+async def register(request: Request, user_data: UserRegister):
     existing = await db.users.find_one({
         '$or': [{'email': user_data.email}, {'username': user_data.username}]
     })
@@ -36,6 +38,7 @@ async def register(user_data: UserRegister):
         'password_hash': hash_password(user_data.password),
         'real_name': user_data.real_name,
         'unique_id': user_data.unique_id,
+        'public_key': user_data.public_key,
         'created_at': datetime.now(timezone.utc).isoformat()
     })
     
@@ -50,7 +53,8 @@ async def register(user_data: UserRegister):
     return {'message': 'OTP sent'}
 
 @router.post('/verify-otp')
-async def verify_otp(data: OTPVerify):
+@limiter.limit("5/minute")
+async def verify_otp(request: Request, data: OTPVerify, response: Response):
     otp_doc = await db.otps.find_one({'email': data.email})
     if not otp_doc or datetime.fromisoformat(otp_doc['expires_at']) < datetime.now(timezone.utc) or otp_doc['otp'] != data.otp:
         raise HTTPException(status_code=400, detail='Invalid or expired OTP')
@@ -71,6 +75,7 @@ async def verify_otp(data: OTPVerify):
         'bio': '',
         'online_status': 'offline',
         'verified': True,
+        'public_key': pending.get('public_key'),
         'created_at': datetime.now(timezone.utc).isoformat(),
         'blocked_users': []
     }
@@ -79,23 +84,48 @@ async def verify_otp(data: OTPVerify):
     await db.otps.delete_many({'email': data.email})
     await db.pending_users.delete_many({'email': data.email})
     
-    token = create_access_token({'sub': user_id})
+    access_token = create_access_token({'sub': user_id})
+    refresh_token = create_refresh_token({'sub': user_id})
+    
+    # Set HttpOnly cookie for refresh token
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=7 * 24 * 60 * 60 # 7 days
+    )
+    
     user_res = {k: v for k, v in user_doc.items() if k not in ['_id', 'password_hash']}
     
-    return {'token': token, 'user': user_res}
+    return {'token': access_token, 'user': user_res}
 
 @router.post('/login')
-async def login(data: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, data: UserLogin, response: Response):
     user = await db.users.find_one({'$or': [{'email': data.login}, {'username': data.login}]})
     if not user or not verify_password(data.password, user['password_hash']):
         raise HTTPException(status_code=401, detail='Invalid credentials')
     
-    token = create_access_token({'sub': user['user_id']})
+    access_token = create_access_token({'sub': user['user_id']})
+    refresh_token = create_refresh_token({'sub': user['user_id']})
+    
+    # Set HttpOnly cookie for refresh token
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=7 * 24 * 60 * 60 # 7 days
+    )
+    
     user_res = {k: v for k, v in user.items() if k not in ['_id', 'password_hash']}
     if 'blocked_users' not in user_res:
         user_res['blocked_users'] = []
         
-    return {'token': token, 'user': user_res}
+    return {'token': access_token, 'user': user_res}
 
 @router.get('/me')
 async def get_me(current_user: dict = Depends(get_current_user)):
@@ -117,3 +147,32 @@ async def delete_account(current_user: dict = Depends(get_current_user)):
     await db.users.delete_one({'user_id': user_id})
     await db.conversations.update_many({}, {'$pull': {'participants': user_id}})
     return {"message": "Account deleted successfully"}
+
+@router.post('/refresh')
+@limiter.limit("20/minute")
+async def refresh_token(request: Request, response: Response):
+    from utils import SECRET_KEY, ALGORITHM
+    import jwt
+    refresh_token = request.cookies.get("refresh_token")
+    
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+        
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get('sub')
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+            
+        user = await db.users.find_one({'user_id': user_id})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+            
+        new_access_token = create_access_token({'sub': user_id})
+        return {'token': new_access_token}
+    except jwt.ExpiredSignatureError:
+        response.delete_cookie("refresh_token")
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+

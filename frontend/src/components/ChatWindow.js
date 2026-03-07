@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { decryptMessage } from "@/utils/encryption";
 import {
   Popover,
   PopoverContent,
@@ -158,6 +159,7 @@ export default function ChatWindow({
           data={messages}
           firstItemIndex={0}
           initialTopMostItemIndex={messages.length - 1}
+          followOutput="smooth"
           startReached={() => {
             if (hasMoreMessages && !isLoadingMessages) {
               loadMoreMessages();
@@ -176,7 +178,13 @@ export default function ChatWindow({
 
             if (m.message_type === "poll") return null;
 
+            const myPrivateKey = user ? localStorage.getItem(`e2ee_private_key_${user.email}`) : null;
+            const theirPublicKey = selectedConversation?.other_user?.public_key;
+
+            const decryptedContent = decryptMessage(m.content, myPrivateKey, theirPublicKey);
+
             const repliedMessage = m.reply_to ? messages.find(msg => msg.message_id === m.reply_to) : null;
+            const decryptedRepliedContent = repliedMessage ? decryptMessage(repliedMessage.content, myPrivateKey, theirPublicKey) : null;
 
             return (
               <div className="py-1">
@@ -186,18 +194,18 @@ export default function ChatWindow({
                     {repliedMessage && (
                       <div className={`text-xs opacity-75 mb-1 px-3 py-1.5 rounded-lg truncate border-l-2 max-w-full cursor-pointer hover:opacity-100 transition-opacity ${isOwn ? 'border-primary/50 bg-primary/10' : 'border-muted-foreground/50 bg-muted/50'}`}>
                         <span className="font-semibold block mb-0.5">{repliedMessage.sender_id === user?.user_id ? "You" : "Them"}:</span>
-                        {repliedMessage.message_type === 'text' ? repliedMessage.content : `[${repliedMessage.message_type}]`}
+                        {repliedMessage.message_type === 'text' ? decryptedRepliedContent : `[${repliedMessage.message_type}]`}
                       </div>
                     )}
 
                     <div className={`relative flex items-center gap-2 ${isOwn ? "flex-row-reverse" : "flex-row"} w-full`}>
                       <div className={`px-4 py-2.5 rounded-2xl relative z-10 w-fit ${isOwn ? "bubble-own text-white rounded-tr-sm" : "bubble-other text-foreground rounded-tl-sm"}`}>
                     {m.message_type === "text" && (
-                      <p className="text-sm leading-relaxed break-words">{m.content}</p>
+                      <p className="text-sm leading-relaxed break-words">{decryptedContent}</p>
                     )}
                     {m.message_type === "location" && (
                       <a
-                        href={m.content}
+                        href={decryptedContent}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 text-inherit text-sm underline underline-offset-2"
@@ -207,9 +215,9 @@ export default function ChatWindow({
                     )}
                     {m.message_type === "image" && (
                       <div className="relative group overflow-hidden rounded-xl">
-                        <img src={m.content} alt="attachment" className="w-full max-h-60 object-cover" />
+                        <img src={decryptedContent} alt="attachment" className="w-full max-h-60 object-cover" />
                         <button
-                          onClick={() => downloadFile(m.content, m.file_name || "image")}
+                          onClick={() => downloadFile(decryptedContent, m.file_name || "image")}
                           className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all"
                           title="Download Image"
                         >
@@ -219,14 +227,14 @@ export default function ChatWindow({
                     )}
                     {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
                       <div>
-                        <video controls src={m.content} className="max-w-full rounded-xl" />
+                        <video controls src={decryptedContent} className="max-w-full rounded-xl" />
                       </div>
                     )}
                     {m.message_type &&
                       !["text", "location", "image", "poll"].includes(m.message_type) &&
                       !["audio", "video"].includes(m.message_type.split("/")[0]) && (
                       <button
-                        onClick={() => downloadFile(m.content, m.file_name)}
+                        onClick={() => downloadFile(decryptedContent, m.file_name)}
                         className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity"
                         title="Download file"
                       >

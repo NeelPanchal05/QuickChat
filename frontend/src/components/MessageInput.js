@@ -8,6 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { encryptMessage } from "@/utils/encryption";
 
 export default function MessageInput({ isCurrentChatBlocked }) {
   const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -82,11 +83,16 @@ export default function MessageInput({ isCurrentChatBlocked }) {
     )
       return;
 
+    const myPrivateKey = localStorage.getItem(`e2ee_private_key_${user.email}`);
+    const theirPublicKey = selectedConversation.other_user?.public_key;
+
     if (messageInput.trim()) {
       const tempId = addOptimisticMessage(messageInput, "text", null, replyingTo?.message_id);
+      const encryptedContent = encryptMessage(messageInput, myPrivateKey, theirPublicKey);
+      
       socket?.emit("send_message", {
         conversation_id: selectedConversation.conversation_id,
-        content: messageInput,
+        content: encryptedContent,
         message_type: "text",
         temp_id: tempId,
         reply_to: replyingTo?.message_id
@@ -95,11 +101,15 @@ export default function MessageInput({ isCurrentChatBlocked }) {
 
     for (const file of attachedFiles) {
       const tempId = addOptimisticMessage(file.data, file.type, file.name, replyingTo?.message_id);
+      
+      // For large files E2EE in-browser base64 can crash the tab, so we might just send the file
+      // normally for this demo unless we want to chunk it. Let's encrypt the data URI!
+      const encryptedFileContent = encryptMessage(file.data, myPrivateKey, theirPublicKey);
 
       try {
         await axios.post(
           `${API}/conversations/${selectedConversation.conversation_id}/messages`,
-          { content: file.data, message_type: file.type, file_name: file.name, temp_id: tempId, reply_to: replyingTo?.message_id },
+          { content: encryptedFileContent, message_type: file.type, file_name: file.name, temp_id: tempId, reply_to: replyingTo?.message_id },
           { headers: { Authorization: `Bearer ${token}` } }
         );
       } catch (error) {
@@ -124,9 +134,14 @@ export default function MessageInput({ isCurrentChatBlocked }) {
       (pos) => {
         const locationUrl = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
         const tempId = addOptimisticMessage(locationUrl, "location");
+        
+        const myPrivateKey = localStorage.getItem(`e2ee_private_key_${user.email}`);
+        const theirPublicKey = selectedConversation.other_user?.public_key;
+        const encryptedLocation = encryptMessage(locationUrl, myPrivateKey, theirPublicKey);
+        
         socket?.emit("send_message", {
           conversation_id: selectedConversation.conversation_id,
-          content: locationUrl,
+          content: encryptedLocation,
           message_type: "location",
           temp_id: tempId,
         });

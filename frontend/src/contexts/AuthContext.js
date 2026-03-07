@@ -6,6 +6,8 @@ import React, {
   useCallback,
 } from "react";
 import io from "socket.io-client";
+import { generateKeyPair } from "../utils/encryption";
+import api from "../utils/api";
 
 const AuthContext = createContext(null);
 
@@ -41,46 +43,29 @@ export const AuthProvider = ({ children }) => {
   const fetchUser = useCallback(
     async (currentToken, retryCount = 0) => {
       try {
-        // Create an abort controller for timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        const response = await api.get('/auth/me');
 
-        const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-          },
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const userData = await response.json();
-          setUser(userData);
+        if (response.status === 200) {
+          setUser(response.data);
           setLoading(false);
-        } else if (response.status === 401) {
-          // Only logout if the token is explicitly rejected by the server
-          logout();
-          setLoading(false);
-        } else {
-          // For other server errors (500, etc.), throw to trigger retry
-          throw new Error(`Server Error: ${response.status}`);
         }
       } catch (error) {
         console.error("Error fetching user:", error instanceof Error ? error.message : String(error));
         
-        // Exponential backoff logic for network errors or server drops
-        if (retryCount < 5) { // Max 5 retries
-          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
+        if (error.response?.status === 401) {
+           // logout is handled by the api interceptor dispatching auth:logout
+           setLoading(false);
+        } else if (retryCount < 5) { // Max 5 retries for network errors
+          const delay = Math.pow(2, retryCount) * 1000;
           console.log(`Retrying fetchUser in ${delay}ms (Attempt ${retryCount + 1})...`);
           setTimeout(() => fetchUser(currentToken, retryCount + 1), delay);
         } else {
           console.error("Failed to fetch user after maximum retries. Backend may be offline.");
-          setLoading(false); // Stop loading after max retries
+          setLoading(false);
         }
       }
     },
-    [logout]
+    []
   );
 
   // Initialize Socket.IO
@@ -114,19 +99,20 @@ export const AuthProvider = ({ children }) => {
     } else {
       setLoading(false);
     }
-  }, [token, fetchUser]); // <--- dependency warning resolved!
+  }, [token, fetchUser]);
+
+  // Listen for interceptor forced logouts
+  useEffect(() => {
+    const handleLogoutEvent = () => logout();
+    window.addEventListener('auth:logout', handleLogoutEvent);
+    return () => window.removeEventListener('auth:logout', handleLogoutEvent);
+  }, [logout]);
 
   const login = async (loginIdentifier, password) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: loginIdentifier, password }),
-      });
+      const res = await api.post('/auth/login', { login: loginIdentifier, password });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Login failed");
-
+      const data = res.data;
       localStorage.setItem("token", data.token);
       setToken(data.token);
 
@@ -135,42 +121,33 @@ export const AuthProvider = ({ children }) => {
       return data;
     } catch (err) {
       console.error("Login error:", err instanceof Error ? err.message : String(err));
-      throw err;
+      throw new Error(err.response?.data?.detail || "Login failed");
     }
   };
 
   const register = async (userData) => {
-    const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(userData),
-    });
+    // Generate E2EE Keys
+    const keyPair = generateKeyPair();
+    localStorage.setItem(`e2ee_private_key_${userData.email}`, keyPair.privateKey);
+    
+    const registrationData = {
+      ...userData,
+      public_key: keyPair.publicKey
+    };
 
-    let data;
     try {
-      data = await res.json();
-    } catch {
-      const text = await res.clone().text().catch(() => "");
-      throw new Error(text || "Registration failed. Please try again.");
+      const res = await api.post('/auth/register', registrationData);
+      return res.data;
+    } catch (err) {
+      throw new Error(err.response?.data?.detail || "Registration failed. Please try again.");
     }
-
-    if (!res.ok) {
-      throw new Error(data.detail || "Registration failed");
-    }
-    return data;
   };
 
   const verifyOtp = async (email, otp) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/verify-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
-      });
+      const res = await api.post('/auth/verify-otp', { email, otp });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "OTP verification failed");
-
+      const data = res.data;
       localStorage.setItem("token", data.token);
       setToken(data.token);
 
@@ -178,7 +155,7 @@ export const AuthProvider = ({ children }) => {
       return data;
     } catch (err) {
       console.error("OTP Error:", err instanceof Error ? err.message : String(err));
-      throw err;
+      throw new Error(err.response?.data?.detail || "OTP verification failed");
     }
   };
 

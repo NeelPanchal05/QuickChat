@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, HTTPException, Depends, Body, Request
 from typing import Optional
 from datetime import datetime, timezone
 from bson import ObjectId
@@ -10,11 +10,13 @@ from spam_protection import spam_protection
 from encryption import encrypt_message, decrypt_message
 from socket_instance import sio, active_users
 from push_service import send_push_notification
+from rate_limiter import limiter
 
 router = APIRouter(prefix="/api", tags=["Chat"])
 
 @router.post('/conversations')
-async def create_conversation(data: ConversationCreate, current_user: dict = Depends(get_current_user)):
+@limiter.limit("20/minute")
+async def create_conversation(request: Request, data: ConversationCreate, current_user: dict = Depends(get_current_user)):
     existing = await db.conversations.find_one({
         'type': 'direct',
         'participants': {'$all': [current_user['user_id'], data.participant_id]}
@@ -104,7 +106,9 @@ async def get_messages(
     return messages
 
 @router.post('/conversations/{conversation_id}/messages')
+@limiter.limit("60/minute")
 async def save_attachment_message(
+    request: Request,
     conversation_id: str, 
     content: str = Body(...), 
     message_type: str = Body(...), 

@@ -39,20 +39,19 @@ const MenuSection = ({ label, children }) => (
 );
 
 const AnimItem = ({ onClick, icon: Icon, label, danger, checked, isCheckbox, onCheck }) => {
-  const [hovered, setHovered] = useState(false);
   const content = (
     <div
-      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg cursor-pointer text-sm transition-all duration-150 select-none"
-      style={{
-        background: hovered ? (danger ? 'rgba(239,68,68,0.1)' : 'rgba(139,92,246,0.1)') : 'transparent',
-        color: danger ? (hovered ? '#f87171' : 'rgba(248,113,113,0.8)') : (hovered ? 'white' : 'rgba(255,255,255,0.7)'),
-        transform: hovered ? 'translateX(3px)' : 'translateX(0)',
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      className={`group flex items-center gap-2.5 w-full px-3 py-2 rounded-lg cursor-pointer text-sm transition-all duration-150 select-none ${
+        danger 
+          ? 'text-red-400/80 hover:text-red-400 hover:bg-red-500/10' 
+          : 'text-white/70 hover:text-white hover:bg-violet-500/10'
+      } hover:translate-x-[3px]`}
       onClick={isCheckbox ? undefined : onClick}
     >
-      <Icon size={15} style={{ flexShrink: 0, transition: 'transform 0.2s', transform: hovered ? 'scale(1.15)' : 'scale(1)' }} />
+      <Icon 
+        size={15} 
+        className="shrink-0 transition-transform duration-200 group-hover:scale-110" 
+      />
       <span className="flex-1 font-medium">{label}</span>
       {isCheckbox && (
         <div
@@ -76,19 +75,7 @@ const AnimItem = ({ onClick, icon: Icon, label, danger, checked, isCheckbox, onC
   );
   return isCheckbox ? content : <DropdownMenuItem asChild>
     <button className="w-full text-left p-0 bg-transparent border-0 outline-none focus:outline-none" onClick={onClick}>
-      <div
-        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg cursor-pointer text-sm transition-all duration-150 select-none"
-        style={{
-          background: hovered ? (danger ? 'rgba(239,68,68,0.1)' : 'rgba(139,92,246,0.1)') : 'transparent',
-          color: danger ? (hovered ? '#f87171' : 'rgba(248,113,113,0.8)') : (hovered ? 'white' : 'rgba(255,255,255,0.7)'),
-          transform: hovered ? 'translateX(3px)' : 'translateX(0)',
-        }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        <Icon size={15} style={{ flexShrink: 0, transition: 'transform 0.2s', transform: hovered ? 'scale(1.15)' : 'scale(1)' }} />
-        <span className="flex-1 font-medium">{label}</span>
-      </div>
+      {content}
     </button>
   </DropdownMenuItem>;
 };

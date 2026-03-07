@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext';
 import { useChatSocket } from '@/hooks/useChatSocket';
 import { useSound } from './SoundContext';
 import { useChatStore } from '@/hooks/useChatStore';
+import api from '@/utils/api';
 
 const ChatContext = createContext(null);
 
@@ -44,17 +45,14 @@ export const ChatProvider = ({ children }) => {
   const fetchConversations = useCallback(async () => {
     try {
       if (!token) return;
-      const res = await fetch(`${API}/conversations`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setConversations(data);
+      const res = await api.get('/conversations');
+      if (res.status === 200) {
+        setConversations(res.data);
       }
     } catch (e) {
       console.error("Failed to fetch conversations");
     }
-  }, [API, token, setConversations]);
+  }, [token, setConversations]);
 
   const fetchMessages = useCallback(
     async (convId, filters = {}, append = false) => {
@@ -66,12 +64,9 @@ export const ChatProvider = ({ children }) => {
         if (filters.end) queryParams.append("end_date", filters.end);
         if (filters.before) queryParams.append("before", filters.before);
 
-        const res = await fetch(
-          `${API}/conversations/${convId}/messages?${queryParams}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (res.ok) {
-          const data = await res.json();
+        const res = await api.get(`/conversations/${convId}/messages?${queryParams}`);
+        if (res.status === 200) {
+          const data = res.data;
           setHasMoreMessages(data.length === 50); // Assuming 50 is backend limit
           
           if (append) {
@@ -86,7 +81,7 @@ export const ChatProvider = ({ children }) => {
         setIsLoadingMessages(false);
       }
     },
-    [API, token, setIsLoadingMessages, setHasMoreMessages, setMessages]
+    [token, setIsLoadingMessages, setHasMoreMessages, setMessages]
   );
 
   const addOptimisticMessage = useCallback((content, type, fileName = null, replyToId = null) => {
