@@ -129,6 +129,7 @@ async def login(request: Request, data: UserLogin, response: Response):
 
 @router.get('/me')
 async def get_me(current_user: dict = Depends(get_current_user)):
+    # current_user from dependencies.py already excludes profile_photo, bio, password_hash
     return current_user
 
 @router.post('/change-password')

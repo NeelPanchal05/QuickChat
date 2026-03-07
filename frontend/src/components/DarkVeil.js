@@ -73,6 +73,18 @@ void main(){
 }
 `;
 
+// Detect actual phones/tablets using user-agent + screen width.
+// We intentionally avoid navigator.maxTouchPoints because Windows laptops with
+// touchscreens report > 0 touch points, which would wrongly disable the effect on desktop.
+const isMobileOrLowPower = () => {
+  if (typeof window === 'undefined') return false;
+  // User-agent check for actual mobile OS
+  const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  // Small screen check — real phones are under 768px wide
+  const isSmallScreen = window.screen.width < 768;
+  return isMobileUA || isSmallScreen;
+};
+
 export default function DarkVeil({
   hueShift = 0,
   noiseIntensity = 0,
@@ -82,15 +94,20 @@ export default function DarkVeil({
   warpAmount = 0,
   resolutionScale = 1
 }) {
+  const mobile = isMobileOrLowPower();
   const ref = useRef(null);
+
   useEffect(() => {
+    // Skip WebGL setup entirely on mobile — the CPPN shader freezes mobile GPUs
+    if (mobile || !ref.current) return;
+
     const canvas = ref.current;
     const parent = canvas.parentElement;
 
     const renderer = new Renderer({
       dpr: Math.min(window.devicePixelRatio, 2),
       canvas,
-      alpha: true, // we might want transparent background or something, let's just keep as is
+      alpha: true,
     });
 
     const gl = renderer.gl;
@@ -113,8 +130,7 @@ export default function DarkVeil({
     const mesh = new Mesh(gl, { geometry, program });
 
     const resize = () => {
-      const w = parent.clientWidth,
-        h = parent.clientHeight;
+      const w = parent.clientWidth, h = parent.clientHeight;
       renderer.setSize(w * resolutionScale, h * resolutionScale);
       program.uniforms.uResolution.value.set(w, h);
     };
@@ -126,6 +142,7 @@ export default function DarkVeil({
     let frame = 0;
 
     const loop = () => {
+      frame = requestAnimationFrame(loop);
       program.uniforms.uTime.value = ((performance.now() - start) / 1000) * speed;
       program.uniforms.uHueShift.value = hueShift;
       program.uniforms.uNoise.value = noiseIntensity;
@@ -133,7 +150,6 @@ export default function DarkVeil({
       program.uniforms.uScanFreq.value = scanlineFrequency;
       program.uniforms.uWarp.value = warpAmount;
       renderer.render({ scene: mesh });
-      frame = requestAnimationFrame(loop);
     };
 
     loop();
@@ -142,6 +158,10 @@ export default function DarkVeil({
       cancelAnimationFrame(frame);
       window.removeEventListener('resize', resize);
     };
-  }, [hueShift, noiseIntensity, scanlineIntensity, speed, scanlineFrequency, warpAmount, resolutionScale]);
-  return <canvas ref={ref} className="w-full h-full block" />;
+  }, [mobile, hueShift, noiseIntensity, scanlineIntensity, speed, scanlineFrequency, warpAmount, resolutionScale]);
+
+  // On mobile, render nothing — no GPU usage at all
+  if (mobile) return null;
+
+  return <canvas ref={ref} style={{ width: '100%', height: '100%', display: 'block' }} />;
 }

@@ -41,13 +41,15 @@ export default function Profile({ onBack }) {
         img.src = event.target.result;
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const MAX = 500;
+          // 200px is sufficient for avatar thumbnails shown in sidebar/chat header.
+          // Smaller = much smaller base64 blob stored in MongoDB = faster loading for all users.
+          const MAX = 200;
           let { width, height } = img;
           if (width > height) { if (width > MAX) { height *= MAX / width; width = MAX; } }
           else { if (height > MAX) { width *= MAX / height; height = MAX; } }
           canvas.width = width; canvas.height = height;
           canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.7));
+          resolve(canvas.toDataURL("image/jpeg", 0.6));
         };
       };
     });

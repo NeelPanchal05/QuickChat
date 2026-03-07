@@ -18,8 +18,12 @@ async def setup():
         await db.users.create_index('email', unique=True)
         await db.messages.create_index('conversation_id')
         await db.messages.create_index('timestamp')
+        # Compound index: speeds up "get last message per conversation" query used in aggregation
+        await db.messages.create_index([('conversation_id', 1), ('timestamp', -1)])
         await db.conversations.create_index('participants')
         await db.conversations.create_index('updated_at')
+        # Compound index: speeds up the main conversation list filter + sort
+        await db.conversations.create_index([('participants', 1), ('updated_at', -1)])
         await db.otps.create_index('email')
         logger.info('Database indexes created successfully')
     except Exception as e:

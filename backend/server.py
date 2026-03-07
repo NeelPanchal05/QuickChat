@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import socketio
 import logging
 
@@ -22,8 +23,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run setup manually using backend/scripts/setup_db.py instead of running on every reload
-    logger.info('Starting API server without inline DB indexing...')
+    logger.info('Starting API server...')
     yield
     client.close()
     logger.info('MongoDB connection closed')
@@ -32,6 +32,10 @@ app = FastAPI(lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# GZip compression — compresses all responses >= 1000 bytes.
+# Typically reduces JSON payload size by 60-80%, critical for mobile network performance.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,

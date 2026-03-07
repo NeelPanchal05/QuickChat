@@ -11,11 +11,8 @@ import api from "../utils/api";
 
 const AuthContext = createContext(null);
 
-// Use environment variable for backend URL, defaulting to localhost for development
 let BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 
-// If the configured URL evaluates to localhost, but the browser is NOT on localhost,
-// rewrite it to use the browser's current hostname so mobile devices can connect.
 if (
   BACKEND_URL.includes("localhost") &&
   window.location.hostname !== "localhost" &&
@@ -25,42 +22,51 @@ if (
 }
 const API = `${BACKEND_URL}/api`;
 
+// --- User cache helpers -------------------------------------------------
+// Caching the user object in localStorage means the UI renders instantly
+// on page reload without waiting for a /auth/me round-trip to the server.
+const USER_CACHE_KEY = "qc_user_cache";
+const getCachedUser = () => {
+  try { return JSON.parse(localStorage.getItem(USER_CACHE_KEY)); } catch { return null; }
+};
+const setCachedUser = (user) => {
+  try { localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user)); } catch {}
+};
+const clearCachedUser = () => localStorage.removeItem(USER_CACHE_KEY);
+// -----------------------------------------------------------------------
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const cachedUser = getCachedUser();
+
+  const [user, setUser] = useState(cachedUser);
   const [token, setToken] = useState(localStorage.getItem("token"));
-  const [loading, setLoading] = useState(true);
+  // If we have a cached user, skip the loading state so the UI renders immediately
+  const [loading, setLoading] = useState(!cachedUser || !localStorage.getItem("token"));
   const [socket, setSocket] = useState(null);
 
-  // 1. Define logout first using useCallback so it's stable
   const logout = useCallback(() => {
     localStorage.removeItem("token");
+    clearCachedUser();
     setToken(null);
     setUser(null);
-    // Socket disconnection is automatically handled by the useEffect cleanup below when token becomes null
   }, []);
 
-  // 2. Define fetchUser using useCallback (depends on logout)
   const fetchUser = useCallback(
     async (currentToken, retryCount = 0) => {
       try {
         const response = await api.get('/auth/me');
-
         if (response.status === 200) {
           setUser(response.data);
+          setCachedUser(response.data);
           setLoading(false);
         }
       } catch (error) {
-        console.error("Error fetching user:", error instanceof Error ? error.message : String(error));
-        
         if (error.response?.status === 401) {
-           // logout is handled by the api interceptor dispatching auth:logout
            setLoading(false);
-        } else if (retryCount < 5) { // Max 5 retries for network errors
+        } else if (retryCount < 5) {
           const delay = Math.pow(2, retryCount) * 1000;
-          console.log(`Retrying fetchUser in ${delay}ms (Attempt ${retryCount + 1})...`);
           setTimeout(() => fetchUser(currentToken, retryCount + 1), delay);
         } else {
-          console.error("Failed to fetch user after maximum retries. Backend may be offline.");
           setLoading(false);
         }
       }
@@ -68,17 +74,17 @@ export const AuthProvider = ({ children }) => {
     []
   );
 
-  // Initialize Socket.IO
+  // Initialize Socket.IO — websocket ONLY, no polling.
+  // "polling" adds 1-2 extra HTTP round-trips before upgrading to WebSocket.
+  // On mobile networks this can add several seconds of latency.
   useEffect(() => {
     if (token) {
       const newSocket = io(BACKEND_URL, {
         auth: { token },
-        transports: ["websocket", "polling"],
+        transports: ["websocket"],   // ← websocket only, no polling
         withCredentials: true,
-      });
-
-      newSocket.on("connect", () => {
-        console.log("Socket connected:", newSocket.id);
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
       });
 
       newSocket.on("connect_error", (err) => {
@@ -86,22 +92,29 @@ export const AuthProvider = ({ children }) => {
       });
 
       setSocket(newSocket);
-
-      // Cleanup function: Disconnects socket when component unmounts OR when token changes (e.g., logout)
       return () => newSocket.disconnect();
     }
   }, [token]);
 
-  // Check auth on load
+  // On mount: if we have a cached user+token, show UI immediately, then
+  // revalidate in the background to keep data fresh.
   useEffect(() => {
     if (token) {
-      fetchUser(token);
+      if (!cachedUser) {
+        // No cache — must wait for /auth/me before showing anything
+        setLoading(true);
+        fetchUser(token);
+      } else {
+        // Cache hit — UI renders immediately with cached data.
+        // Revalidate silently in background (no loading state change).
+        fetchUser(token);
+      }
     } else {
       setLoading(false);
     }
-  }, [token, fetchUser]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Listen for interceptor forced logouts
   useEffect(() => {
     const handleLogoutEvent = () => logout();
     window.addEventListener('auth:logout', handleLogoutEvent);
@@ -111,29 +124,31 @@ export const AuthProvider = ({ children }) => {
   const login = async (loginIdentifier, password) => {
     try {
       const res = await api.post('/auth/login', { login: loginIdentifier, password });
-
       const data = res.data;
+
       localStorage.setItem("token", data.token);
       setToken(data.token);
 
-      // Fetch user immediately
-      await fetchUser(data.token);
+      // Login response includes the user object — use it directly.
+      // This avoids an extra /auth/me round-trip right after login.
+      if (data.user) {
+        setUser(data.user);
+        setCachedUser(data.user);
+        setLoading(false);
+      } else {
+        await fetchUser(data.token);
+      }
       return data;
     } catch (err) {
-      console.error("Login error:", err instanceof Error ? err.message : String(err));
       throw new Error(err.response?.data?.detail || "Login failed");
     }
   };
 
   const register = async (userData) => {
-    // Generate E2EE Keys
     const keyPair = generateKeyPair();
     localStorage.setItem(`e2ee_private_key_${userData.email}`, keyPair.privateKey);
     
-    const registrationData = {
-      ...userData,
-      public_key: keyPair.publicKey
-    };
+    const registrationData = { ...userData, public_key: keyPair.publicKey };
 
     try {
       const res = await api.post('/auth/register', registrationData);
@@ -146,15 +161,20 @@ export const AuthProvider = ({ children }) => {
   const verifyOtp = async (email, otp) => {
     try {
       const res = await api.post('/auth/verify-otp', { email, otp });
-
       const data = res.data;
+
       localStorage.setItem("token", data.token);
       setToken(data.token);
 
-      await fetchUser(data.token);
+      if (data.user) {
+        setUser(data.user);
+        setCachedUser(data.user);
+        setLoading(false);
+      } else {
+        await fetchUser(data.token);
+      }
       return data;
     } catch (err) {
-      console.error("OTP Error:", err instanceof Error ? err.message : String(err));
       throw new Error(err.response?.data?.detail || "OTP verification failed");
     }
   };
@@ -180,3 +200,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+

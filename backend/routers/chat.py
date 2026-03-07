@@ -40,34 +40,80 @@ async def create_conversation(request: Request, data: ConversationCreate, curren
 
 @router.get('/conversations')
 async def get_conversations(current_user: dict = Depends(get_current_user)):
-    convs = await db.conversations.find({
-        'participants': current_user['user_id'],
-        'archived_by': {'$ne': current_user['user_id']}
-    }, {'_id': 0}).sort('updated_at', -1).to_list(100)
+    user_id = current_user['user_id']
     
+    pipeline = [
+        # Step 1: Filter conversations this user belongs to (not archived)
+        {
+            '$match': {
+                'participants': user_id,
+                'archived_by': {'$ne': user_id}
+            }
+        },
+        # Step 2: Sort newest first
+        { '$sort': { 'updated_at': -1 } },
+        { '$limit': 100 },
+
+        # Step 3: Join the last message in each conversation
+        {
+            '$lookup': {
+                'from': 'messages',
+                'let': { 'conv_id': '$conversation_id' },
+                'pipeline': [
+                    { '$match': { '$expr': { '$eq': ['$conversation_id', '$$conv_id'] } } },
+                    { '$sort': { 'timestamp': -1 } },
+                    { '$limit': 1 },
+                    { '$project': { '_id': 0 } }
+                ],
+                'as': 'last_message_arr'
+            }
+        },
+        # Step 4: Flatten last_message array → single object or null
+        {
+            '$addFields': {
+                'last_message': { '$arrayElemAt': ['$last_message_arr', 0] }
+            }
+        },
+        { '$unset': 'last_message_arr' },
+        { '$project': { '_id': 0 } }
+    ]
+
+    convs = await db.conversations.aggregate(pipeline).to_list(100)
+
+    # Collect all unique other-user IDs in one pass
+    other_ids = []
     for conv in convs:
-        # Safe fallback in case user is alone in the conversation
-        other_participants = [p for p in conv.get('participants', []) if p != current_user['user_id']]
-        other_id = other_participants[0] if other_participants else current_user['user_id']
-        
-        conv['other_user'] = await db.users.find_one(
-            {'user_id': other_id},
-            {'_id': 0, 'user_id': 1, 'username': 1, 'real_name': 1, 'profile_photo': 1, 'online_status': 1}
-        )
-        last_msg = await db.messages.find_one(
-            {'conversation_id': conv['conversation_id']},
-            {'_id': 0}, sort=[('timestamp', -1)]
-        )
+        participants = conv.get('participants', [])
+        others = [p for p in participants if p != user_id]
+        other_id = others[0] if others else user_id
+        conv['_other_id'] = other_id
+        if other_id not in other_ids:
+            other_ids.append(other_id)
+
+    # Fetch all other users in a SINGLE query
+    users_cursor = db.users.find(
+        {'user_id': {'$in': other_ids}},
+        {'_id': 0, 'user_id': 1, 'username': 1, 'real_name': 1, 'profile_photo': 1, 'online_status': 1, 'public_key': 1}
+    )
+    users_list = await users_cursor.to_list(len(other_ids))
+    users_map = {u['user_id']: u for u in users_list}
+
+    # Assemble final response
+    for conv in convs:
+        other_id = conv.pop('_other_id')
+        conv['other_user'] = users_map.get(other_id)
+        conv['is_pinned'] = user_id in conv.get('pinned_by', [])
+
+        # Decrypt last message preview
+        last_msg = conv.get('last_message')
         if last_msg and last_msg.get('content'):
-             try:
-                 last_msg['content'] = decrypt_message(last_msg['content'])
-             except Exception:
-                 pass # Fallback gracefully if decryption fails
-             
-        conv['last_message'] = last_msg
-        conv['is_pinned'] = current_user['user_id'] in conv.get('pinned_by', [])
-        
+            try:
+                last_msg['content'] = decrypt_message(last_msg['content'])
+            except Exception:
+                pass
+
     return convs
+
 
 @router.get('/conversations/{conversation_id}/messages')
 async def get_messages(
