@@ -18,14 +18,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await db.users.create_index('user_id', unique=True)
-    await db.users.create_index('email', unique=True)
-    await db.messages.create_index('conversation_id')
-    await db.messages.create_index('timestamp')
-    await db.conversations.create_index('participants')
-    await db.conversations.create_index('updated_at')
-    await db.otps.create_index('email')
-    logger.info('Database indexes created successfully')
+    # Run setup manually using backend/scripts/setup_db.py instead of running on every reload
+    logger.info('Starting API server without inline DB indexing...')
     yield
     client.close()
     logger.info('MongoDB connection closed')

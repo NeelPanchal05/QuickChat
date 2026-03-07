@@ -11,12 +11,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import SettingsMenu from "@/components/SettingsMenu";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useChat } from "@/contexts/ChatContext";
 
 export default function ChatSidebar({
-  conversations,
-  selectedConversation,
-  setSelectedConversation,
-  onlineUsers,
   setShowInvite,
   setShowProfile,
   logout,
@@ -32,6 +29,7 @@ export default function ChatSidebar({
   deleteConversation,
 }) {
   const { t } = useLanguage();
+  const { conversations, selectedConversation, setSelectedConversation, onlineUsers } = useChat();
 
   const isUserOnline = (userId) => onlineUsers.has(userId);
 

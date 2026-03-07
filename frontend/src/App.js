@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { SoundProvider } from "./contexts/SoundContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
+import { ChatProvider } from "./contexts/ChatContext";
 
 // --- OPTIMIZATION: Lazy Load Pages ---
 const Login = lazy(() => import("./pages/Login"));
@@ -70,7 +71,9 @@ export default function App() {
                       path="/"
                       element={
                         <ProtectedRoute>
-                          <Chat />
+                          <ChatProvider>
+                            <Chat />
+                          </ChatProvider>
                         </ProtectedRoute>
                       }
                     />
@@ -78,7 +81,9 @@ export default function App() {
                       path="/chat"
                       element={
                         <ProtectedRoute>
-                          <Chat />
+                          <ChatProvider>
+                            <Chat />
+                          </ChatProvider>
                         </ProtectedRoute>
                       }
                     />

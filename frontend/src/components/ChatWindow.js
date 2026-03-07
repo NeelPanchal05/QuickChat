@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Phone, Video, Calendar, Shield, MoreVertical, Eraser, MessageCircle, X } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useChat } from "@/contexts/ChatContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Popover,
   PopoverContent,
@@ -19,27 +21,58 @@ import {
 import MessageInput from "@/components/MessageInput";
 
 export default function ChatWindow({
-  selectedConversation,
-  setSelectedConversation,
-  isUserOnline,
   startCall,
   dateSearch,
   setDateSearch,
-  fetchMessages,
   setShowPrivacy,
   clearChat,
   memoizedMessages,
-  typing,
-  messagesEndRef,
-  user,
-  socket,
-  API,
-  token,
-  addOptimisticMessage,
   isCurrentChatBlocked,
 }) {
   const { t } = useLanguage();
   const { currentThemeData } = useTheme();
+  
+  const {
+    selectedConversation,
+    setSelectedConversation,
+    onlineUsers,
+    typing,
+    messagesEndRef,
+    fetchMessages,
+    hasMoreMessages,
+    messages,
+    isLoadingMessages
+  } = useChat();
+
+  const isUserOnline = (userId) => onlineUsers.has(userId);
+
+  // --- Infinite Scroll Logic ---
+  const observerRef = useRef(null);
+  
+  const loadMoreMessages = useCallback(() => {
+    if (isLoadingMessages || !hasMoreMessages || messages.length === 0 || !selectedConversation) return;
+    
+    // The timestamp of the oldest loaded message acts as our cursor
+    const oldestMessageTimestamp = messages[0].timestamp;
+    
+    fetchMessages(selectedConversation.conversation_id, { before: oldestMessageTimestamp }, true);
+  }, [isLoadingMessages, hasMoreMessages, messages, selectedConversation, fetchMessages]);
+
+  const topElementRef = useCallback((node) => {
+    if (isLoadingMessages) return;
+    
+    // Disconnect old observer
+    if (observerRef.current) observerRef.current.disconnect();
+
+    observerRef.current = new IntersectionObserver((entries) => {
+      // If the top element intersects, we have scrolled to the top
+      if (entries[0].isIntersecting && hasMoreMessages) {
+        loadMoreMessages();
+      }
+    });
+
+    if (node) observerRef.current.observe(node);
+  }, [isLoadingMessages, hasMoreMessages, loadMoreMessages]);
 
   return (
     <div
@@ -117,6 +150,14 @@ export default function ChatWindow({
       </div>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+        
+        {/* Intersection Observer Target for Infinite Scroll */}
+        {hasMoreMessages && (
+          <div ref={topElementRef} className="h-4 w-full flex justify-center items-center py-4">
+            {isLoadingMessages && <div className="typing-dot w-2 h-2 rounded-full" style={{background:'rgba(139,92,246,0.8)'}} />}
+          </div>
+        )}
+        
         {memoizedMessages}
         {/* Typing indicator */}
         {typing && (
@@ -132,12 +173,6 @@ export default function ChatWindow({
       </div>
       {/* Input Bar */}
       <MessageInput
-        selectedConversation={selectedConversation}
-        user={user}
-        socket={socket}
-        API={API}
-        token={token}
-        addOptimisticMessage={addOptimisticMessage}
         isCurrentChatBlocked={isCurrentChatBlocked}
       />
     </div>

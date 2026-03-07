@@ -1,7 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
-import { useSound } from "@/contexts/SoundContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import axios from "axios";
 import { Input } from "@/components/ui/input";
@@ -50,29 +48,26 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-} from "@/components/ui/dropdown-menu";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-import { useChatSocket } from "@/hooks/useChatSocket";
+import { useChat } from "@/contexts/ChatContext";
 
 export default function Chat() {
   const { user, token, socket, logout, API, fetchUser } = useAuth();
-  const { currentThemeData } = useTheme();
-  const { playNotificationSound } = useSound();
   const { t } = useLanguage();
-
-  // Data States
-  const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  
+  const {
+    conversations,
+    setConversations,
+    selectedConversation,
+    setSelectedConversation,
+    messages,
+    onlineUsers,
+    showCall,
+    setShowCall,
+    callData,
+    setCallData,
+    addOptimisticMessage,
+    fetchConversations,
+  } = useChat();
 
   // UI States
   const [searchQuery, setSearchQuery] = useState("");
@@ -93,43 +88,7 @@ export default function Chat() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
 
-  // Call States
-  const [showCall, setShowCall] = useState(false);
-  const [callData, setCallData] = useState(null);
-
-  // Refs
-  const messagesEndRef = useRef(null);
-
   // --- API Functions ---
-  const fetchConversations = useCallback(async () => {
-    try {
-      const res = await axios.get(`${API}/conversations`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setConversations(res.data);
-    } catch (e) {
-      console.error(e);
-    }
-  }, [API, token]);
-
-  const fetchMessages = useCallback(
-    async (convId, dates = null) => {
-      try {
-        let url = `${API}/conversations/${convId}/messages`;
-        if (dates && dates.start) {
-          url += `?start_date=${dates.start}`;
-          if (dates.end) url += `&end_date=${dates.end}`;
-        }
-        const res = await axios.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setMessages(res.data);
-      } catch (e) {
-        console.error(e);
-      }
-    },
-    [API, token]
-  );
 
   const searchUsers = async (query) => {
     if (!query.trim()) {
@@ -230,77 +189,19 @@ export default function Chat() {
         `${API}/conversations/${selectedConversation.conversation_id}/messages`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setMessages([]);
+      // NOTE: We rely on a reload or proper context dispatch here ideally
+      window.location.reload();
       toast.success("Chat cleared");
     } catch (error) {
       toast.error("Failed to clear chat");
     }
   };
 
-  const addOptimisticMessage = (content, type, fileName = null) => {
-    if (!user) return null;
-    const tempId = `temp_${Date.now()}_${Math.random()}`;
-    const optimisticMsg = {
-      message_id: tempId,
-      conversation_id: selectedConversation.conversation_id,
-      sender_id: user.user_id,
-      content: content,
-      message_type: type,
-      file_name: fileName,
-      timestamp: new Date().toISOString(),
-      read_by: [user.user_id],
-    };
-
-    setMessages((prev) => [...prev, optimisticMsg]);
-
-    setConversations((prev) => {
-      const updated = prev.map((c) => {
-        if (c.conversation_id === selectedConversation.conversation_id) {
-          return {
-            ...c,
-            last_message: optimisticMsg,
-            updated_at: optimisticMsg.timestamp,
-          };
-        }
-        return c;
-      });
-      return updated.sort(
-        (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
-      );
-    });
-
-    return tempId;
-  };
-
-  useChatSocket({
-    socket,
-    user,
-    selectedConversation,
-    setMessages,
-    setTyping,
-    setCallData,
-    setShowCall,
-    setOnlineUsers,
-    fetchConversations,
-    fetchMessages,
-    playNotificationSound,
-  });
-
-  useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () =>
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  const isUserOnline = (userId) => onlineUsers.has(userId);
   const startCall = (callType) => {
     if (selectedConversation) {
       setCallData({
-        call_type: callType, // Changed from callType to call_type
-        callType: callType,  // Keep both for compatibility
+        call_type: callType,
+        callType: callType,
         otherUser: selectedConversation.other_user,
         incoming: false,
       });
@@ -383,10 +284,6 @@ export default function Chat() {
     <div className="h-screen flex flex-col md:flex-row overflow-hidden bg-background">
       {/* Sidebar */}
       <ChatSidebar 
-        conversations={conversations}
-        selectedConversation={selectedConversation}
-        setSelectedConversation={setSelectedConversation}
-        onlineUsers={onlineUsers}
         setShowInvite={setShowInvite}
         setShowProfile={setShowProfile}
         logout={logout}
@@ -405,23 +302,12 @@ export default function Chat() {
       {/* Chat Area */}
       {selectedConversation ? (
         <ChatWindow
-          selectedConversation={selectedConversation}
-          setSelectedConversation={setSelectedConversation}
-          isUserOnline={isUserOnline}
           startCall={startCall}
           dateSearch={dateSearch}
           setDateSearch={setDateSearch}
-          fetchMessages={fetchMessages}
           setShowPrivacy={setShowPrivacy}
           clearChat={clearChat}
           memoizedMessages={memoizedMessages}
-          typing={typing}
-          messagesEndRef={messagesEndRef}
-          user={user}
-          socket={socket}
-          API={API}
-          token={token}
-          addOptimisticMessage={addOptimisticMessage}
           isCurrentChatBlocked={isCurrentChatBlocked}
         />
       ) : (

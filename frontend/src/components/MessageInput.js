@@ -7,17 +7,14 @@ import { toast } from "sonner";
 import axios from "axios";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { useChat } from "@/contexts/ChatContext";
+import { useAuth } from "@/contexts/AuthContext";
 
-export default function MessageInput({
-  selectedConversation,
-  user,
-  socket,
-  API,
-  token,
-  addOptimisticMessage,
-  isCurrentChatBlocked,
-}) {
+export default function MessageInput({ isCurrentChatBlocked }) {
   const { t } = useLanguage();
+  const { user, socket, API, token } = useAuth();
+  const { selectedConversation, addOptimisticMessage } = useChat();
+
   const [messageInput, setMessageInput] = useState("");
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [showMediaUploader, setShowMediaUploader] = useState(false);

@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }) => {
 
   // 2. Define fetchUser using useCallback (depends on logout)
   const fetchUser = useCallback(
-    async (currentToken) => {
+    async (currentToken, retryCount = 0) => {
       try {
         // Create an abort controller for timeout
         const controller = new AbortController();
@@ -57,26 +57,31 @@ export const AuthProvider = ({ children }) => {
         if (response.ok) {
           const userData = await response.json();
           setUser(userData);
+          setLoading(false);
         } else if (response.status === 401) {
           // Only logout if the token is explicitly rejected by the server
           logout();
+          setLoading(false);
         } else {
-          // For other server errors (500, etc.), don't logout — just log it
-          console.error("Failed to fetch user, status:", response.status);
+          // For other server errors (500, etc.), throw to trigger retry
+          throw new Error(`Server Error: ${response.status}`);
         }
       } catch (error) {
         console.error("Error fetching user:", error instanceof Error ? error.message : String(error));
-        // Network errors or timeout: do NOT logout — backend may be temporarily unreachable
-        if (error.name === 'AbortError') {
-          console.error("Request timeout - backend may not be running");
+        
+        // Exponential backoff logic for network errors or server drops
+        if (retryCount < 5) { // Max 5 retries
+          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
+          console.log(`Retrying fetchUser in ${delay}ms (Attempt ${retryCount + 1})...`);
+          setTimeout(() => fetchUser(currentToken, retryCount + 1), delay);
+        } else {
+          console.error("Failed to fetch user after maximum retries. Backend may be offline.");
+          setLoading(false); // Stop loading after max retries
         }
-        // Don't call logout() here — preserve the session
-      } finally {
-        setLoading(false);
       }
     },
     [logout]
-  ); // Safe dependency
+  );
 
   // Initialize Socket.IO
   useEffect(() => {

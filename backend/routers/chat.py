@@ -78,12 +78,14 @@ async def get_messages(
     
     ts_query: dict = {}
     if before:
+        # Note: messages are sorted by timestamp DESCending. 
+        # So "before" means older than the provided timestamp.
         ts_query['$lt'] = before
     
     if start_date:
         ts_query['$gte'] = start_date
-        if end_date:
-            ts_query['$lte'] = end_date
+    if end_date:
+        ts_query['$lte'] = end_date
     
     if ts_query:
         query['timestamp'] = ts_query
