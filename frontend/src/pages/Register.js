@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, MessageCircle, Sparkles, User, AtSign, Mail, Hash, Lock } from "lucide-react";
 import { toast } from "sonner";
+import VariableProximity from "@/components/ui/VariableProximity";
+import { useRef } from "react";
 
 const fields = [
   { name: "real_name",  label: "Full Name",  icon: User,   type: "text",     placeholder: "Your full name",              testId: "real-name-input" },
@@ -22,6 +24,7 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const containerRef = useRef(null);
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t); }, []);
 
@@ -66,6 +69,7 @@ export default function Register() {
       {memoizedBackground}
 
       <div
+        ref={containerRef}
         className="relative z-10 w-full max-w-md"
         style={{
           opacity: mounted ? 1 : 0,
@@ -89,7 +93,16 @@ export default function Register() {
             <h1 className="text-2xl font-bold ml-3 gradient-text" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>QuickChat</h1>
           </div>
 
-          <h2 className="text-lg font-semibold mb-1 text-center text-white animate-fade-in" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Create an account</h2>
+          <div className="text-lg font-semibold mb-1 text-center text-white animate-fade-in cursor-default">
+            <VariableProximity
+              label="Create an account"
+              containerRef={containerRef}
+              radius={100}
+              falloff="linear"
+              fromFontVariationSettings="'wght' 400, 'opsz' 9"
+              toFontVariationSettings="'wght' 1000, 'opsz' 40"
+            />
+          </div>
           <p className="text-xs text-center mb-6 animate-fade-in stagger-1" style={{ color: 'rgba(255,255,255,0.38)' }}>Join thousands chatting securely</p>
 
           <form onSubmit={handleSubmit} className="space-y-3">
