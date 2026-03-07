@@ -1,8 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Send, MapPin, Paperclip, Smile, Mic, Square, X, Image, File as FileIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import EmojiPicker from "emoji-picker-react";
 import { toast } from "sonner";
 import axios from "axios";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -11,9 +10,10 @@ import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function MessageInput({ isCurrentChatBlocked }) {
+  const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
   const { t } = useLanguage();
   const { user, socket, API, token } = useAuth();
-  const { selectedConversation, addOptimisticMessage } = useChat();
+  const { selectedConversation, addOptimisticMessage, replyingTo, setReplyingTo } = useChat();
 
   const [messageInput, setMessageInput] = useState("");
   const [attachedFiles, setAttachedFiles] = useState([]);
@@ -26,6 +26,17 @@ export default function MessageInput({ isCurrentChatBlocked }) {
     selectedConversation,
     addOptimisticMessage
   );
+
+  const typingTimeoutRef = useRef(null);
+
+  const handleTyping = () => {
+    if (!typingTimeoutRef.current && socket && selectedConversation) {
+      socket.emit("typing", { conversation_id: selectedConversation.conversation_id });
+      typingTimeoutRef.current = setTimeout(() => {
+        typingTimeoutRef.current = null;
+      }, 1000);
+    }
+  };
 
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
@@ -72,22 +83,23 @@ export default function MessageInput({ isCurrentChatBlocked }) {
       return;
 
     if (messageInput.trim()) {
-      const tempId = addOptimisticMessage(messageInput, "text");
+      const tempId = addOptimisticMessage(messageInput, "text", null, replyingTo?.message_id);
       socket?.emit("send_message", {
         conversation_id: selectedConversation.conversation_id,
         content: messageInput,
         message_type: "text",
         temp_id: tempId,
+        reply_to: replyingTo?.message_id
       });
     }
 
     for (const file of attachedFiles) {
-      const tempId = addOptimisticMessage(file.data, file.type, file.name);
+      const tempId = addOptimisticMessage(file.data, file.type, file.name, replyingTo?.message_id);
 
       try {
         await axios.post(
           `${API}/conversations/${selectedConversation.conversation_id}/messages`,
-          { content: file.data, message_type: file.type, file_name: file.name, temp_id: tempId },
+          { content: file.data, message_type: file.type, file_name: file.name, temp_id: tempId, reply_to: replyingTo?.message_id },
           { headers: { Authorization: `Bearer ${token}` } }
         );
       } catch (error) {
@@ -99,6 +111,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
     setAttachedFiles([]);
     setShowMediaUploader(false);
     setShowEmojiPicker(false);
+    setReplyingTo(null);
   };
 
   const sendLocation = () => {
@@ -133,7 +146,23 @@ export default function MessageInput({ isCurrentChatBlocked }) {
   }
 
   return (
-    <div className="p-4 bg-card border-t border-border z-10 relative" style={{ backdropFilter: 'blur(20px)' }}>
+    <div className="p-4 bg-card border-t border-border z-10 relative flex flex-col gap-2" style={{ backdropFilter: 'blur(20px)' }}>
+      {replyingTo && (
+        <div className="flex items-center justify-between bg-muted/50 p-2 rounded-lg border border-border text-sm mb-1 px-3">
+          <div className="flex flex-col overflow-hidden max-w-[85%]">
+            <span className="text-primary font-semibold text-xs mb-0.5">
+              {replyingTo.sender_id === user?.user_id ? "Replying to yourself" : "Replying"}
+            </span>
+            <span className="truncate text-muted-foreground text-xs">
+              {replyingTo.message_type === "text" ? replyingTo.content : `Attached ${replyingTo.message_type}`}
+            </span>
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => setReplyingTo(null)} className="h-6 w-6 rounded-full hover:bg-muted">
+            <X size={14} />
+          </Button>
+        </div>
+      )}
+
       {showMediaUploader && (
         <div className="absolute bottom-16 left-0 bg-popover border border-border p-4 rounded-xl shadow-2xl flex flex-col gap-3 min-w-[200px] z-50">
           <label className="flex items-center gap-3 cursor-pointer hover:text-primary transition-colors text-sm">
@@ -180,10 +209,12 @@ export default function MessageInput({ isCurrentChatBlocked }) {
       
       {showEmojiPicker && (
         <div className="absolute bottom-20 z-50">
-          <EmojiPicker
-            theme="dark"
-            onEmojiClick={(e) => setMessageInput((p) => p + e.emoji)}
-          />
+          <React.Suspense fallback={<div className="p-4 bg-popover rounded-xl border border-border">Loading emojis...</div>}>
+            <EmojiPicker
+              theme="dark"
+              onEmojiClick={(e) => setMessageInput((p) => p + e.emoji)}
+            />
+          </React.Suspense>
         </div>
       )}
       
@@ -215,7 +246,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
           value={messageInput}
           onChange={(e) => {
             setMessageInput(e.target.value);
-            socket?.emit("typing", { conversation_id: selectedConversation.conversation_id });
+            handleTyping();
           }}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
           placeholder={isRecording ? "Recording…" : t("type_message")}

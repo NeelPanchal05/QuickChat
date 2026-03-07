@@ -35,14 +35,12 @@ import ChatBackgroundSelector from "@/components/ChatBackgroundSelector";
 import CallHistory from "@/components/CallHistory";
 import PrivacyManager from "@/components/PrivacyManager";
 import MediaUploader from "@/components/MediaUploader";
-import GifPicker from "@/components/GifPicker";
 import MessageReadStatus from "@/components/MessageReadStatus";
 import Profile from "@/pages/Profile";
 import TermsAndConditions from "@/pages/TermsAndConditions";
 import ChatSidebar from "@/components/ChatSidebar";
 import ChatWindow from "@/components/ChatWindow";
 import MessageInput from "@/components/MessageInput";
-import DarkVeil from "@/components/DarkVeil";
 import {
   Dialog,
   DialogContent,
@@ -51,8 +49,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useChat } from "@/contexts/ChatContext";
+import { usePushSubscription } from "@/hooks/usePushSubscription";
 
 export default function Chat() {
+  const GifPicker = React.lazy(() => import("@/components/GifPicker"));
+  const DarkVeil = React.lazy(() => import("@/components/DarkVeil"));
+
   const { user, token, socket, logout, API, fetchUser } = useAuth();
   const { t } = useLanguage();
   
@@ -79,6 +81,9 @@ export default function Chat() {
 
   // Recording State from Custom Hook
   // (Hook is called below after addOptimisticMessage is defined)
+
+  // Push Subscription Hook
+  usePushSubscription();
 
   // Modal States
   const [showProfile, setShowProfile] = useState(false);
@@ -229,90 +234,8 @@ export default function Chat() {
     link.click();
     document.body.removeChild(link);
   };
-
-  const memoizedMessages = useMemo(() => {
-    return messages.map((m, i) => {
-      const isOwn = user && m.sender_id === user.user_id;
-
-      if (m.message_type === "poll") return null;
-
-      return (
-        <div
-          key={m.message_id}
-          className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-message-in`}
-          style={{ animationDelay: `${Math.min(i * 0.02, 0.3)}s` }}
-        >
-          <div
-            className={`max-w-[72%] px-4 py-2.5 rounded-2xl ${
-              isOwn
-                ? "bubble-own text-white rounded-tr-sm"
-                : "bubble-other text-foreground rounded-tl-sm"
-            }`}
-          >
-            {m.message_type === "text" && (
-              <p className="text-sm leading-relaxed break-words">{m.content}</p>
-            )}
-            {m.message_type === "location" && (
-              <a
-                href={m.content}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-inherit text-sm underline underline-offset-2"
-              >
-                <MapPin size={14} /> {t("view_location")}
-              </a>
-            )}
-            {m.message_type === "image" && (
-              <div className="relative group">
-                <img src={m.content} alt="attachment" className="rounded-xl max-h-60 object-cover" />
-                <button
-                  onClick={() => downloadFile(m.content, m.file_name || "image.jpg")}
-                  className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 hover:bg-black/80 rounded-full p-1.5 text-white"
-                  title="Download image"
-                >
-                  <Download size={14} />
-                </button>
-              </div>
-            )}
-            {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
-              <div>
-                <video controls src={m.content} className="max-w-full rounded-xl" />
-                <button
-                  onClick={() => downloadFile(m.content, m.file_name || "video")}
-                  className="mt-1 flex items-center gap-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
-                  title="Download"
-                >
-                  <Download size={12} /> Download
-                </button>
-              </div>
-            )}
-            {m.message_type &&
-              !["text", "location", "image", "poll"].includes(m.message_type) &&
-              !["audio", "video"].includes(m.message_type.split("/")[0]) && (
-              <button
-                onClick={() => downloadFile(m.content, m.file_name || "file")}
-                className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity"
-                title="Download file"
-              >
-                <Paperclip size={14} />
-                <span className="underline underline-offset-2">{m.file_name || t("attached_file")}</span>
-                <Download size={13} className="ml-1 opacity-70" />
-              </button>
-            )}
-            <div className="flex justify-end items-center mt-1 gap-1.5">
-              <span className="text-[10px]" style={{opacity: 0.55}}>
-                {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </span>
-              {isOwn && (
-                <MessageReadStatus status={m.read_by?.length > 1 ? "read" : "sent"} />
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, user, t]);
+  
+  const memoizedMessages = messages;
 
   return (
     <div className="h-screen flex flex-col md:flex-row overflow-hidden bg-background">
@@ -341,21 +264,23 @@ export default function Chat() {
           setDateSearch={setDateSearch}
           setShowPrivacy={setShowPrivacy}
           clearChat={clearChat}
-          memoizedMessages={memoizedMessages}
           isCurrentChatBlocked={isCurrentChatBlocked}
+          downloadFile={downloadFile}
         />
       ) : (
         <div className="hidden md:flex flex-1 items-center justify-center bg-background relative overflow-hidden">
           {/* Animated Background */}
           <div className="absolute inset-0 z-0 opacity-80 mix-blend-screen">
-            <DarkVeil
-              hueShift={0}
-              noiseIntensity={0}
-              scanlineIntensity={0}
-              speed={0.5}
-              scanlineFrequency={0}
-              warpAmount={0}
-            />
+            <React.Suspense fallback={null}>
+              <DarkVeil
+                hueShift={0}
+                noiseIntensity={0}
+                scanlineIntensity={0}
+                speed={0.5}
+                scanlineFrequency={0}
+                warpAmount={0}
+              />
+            </React.Suspense>
           </div>
           
           <div className="text-center animate-fade-up z-10 relative pointer-events-none">
@@ -415,19 +340,21 @@ export default function Chat() {
       </Dialog>
       <Dialog open={showGifPicker} onOpenChange={setShowGifPicker}>
         <DialogContent className="max-w-xl bg-card border-border">
-          <GifPicker
-            onSelect={(url) => {
-              const tempId = addOptimisticMessage(url, "image");
-              socket?.emit("send_message", {
-                conversation_id: selectedConversation.conversation_id,
-                content: url,
-                message_type: "image",
-                temp_id: tempId,
-              });
-              setShowGifPicker(false);
-            }}
-            onClose={() => setShowGifPicker(false)}
-          />
+          <React.Suspense fallback={<div className="p-10 text-center">Loading GIFs...</div>}>
+            <GifPicker
+              onSelect={(url) => {
+                const tempId = addOptimisticMessage(url, "image");
+                socket?.emit("send_message", {
+                  conversation_id: selectedConversation.conversation_id,
+                  content: url,
+                  message_type: "image",
+                  temp_id: tempId,
+                });
+                setShowGifPicker(false);
+              }}
+              onClose={() => setShowGifPicker(false)}
+            />
+          </React.Suspense>
         </DialogContent>
       </Dialog>
       <Dialog open={showInvite} onOpenChange={setShowInvite}>

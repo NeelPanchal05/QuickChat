@@ -5,6 +5,7 @@ from utils import SECRET_KEY, ALGORITHM
 from encryption import encrypt_message
 from spam_protection import spam_protection, is_spam_message
 from socket_instance import sio, active_users, user_sockets
+from push_service import send_push_notification
 
 @sio.on('connect')
 async def connect(sid, environ, auth):
@@ -82,7 +83,9 @@ async def handle_message(sid, data):
         'message_type': msg_type,
         'file_name': data.get('file_name'),
         'timestamp': datetime.now(timezone.utc).isoformat(),
-        'read_by': [user_id]
+        'read_by': [user_id],
+        'reply_to': data.get('reply_to'),
+        'reactions': []
     }
     
     await db.messages.insert_one(doc)
@@ -99,6 +102,14 @@ async def handle_message(sid, data):
         response_doc['temp_id'] = temp_id
     
     await sio.emit('new_message', response_doc, room=doc['conversation_id'])
+
+    if other_id and other_id not in active_users:
+        sender_name = sender.get('real_name', 'Someone') if sender else 'Someone'
+        await send_push_notification(other_id, {
+            "title": sender_name,
+            "body": content if msg_type == 'text' else f"Sent a {msg_type}",
+            "data": { "url": f"/?chat={conversation_id}" } 
+        })
 
 @sio.on('typing')
 async def handle_typing(sid, data):
@@ -119,6 +130,55 @@ async def handle_read(sid, data):
             'message_id': data.get('message_id'), 
             'user_id': user_sockets[sid]
         }, room=data.get('conversation_id'))
+
+@sio.on('messages_read_batch')
+async def handle_read_batch(sid, data):
+    if sid in user_sockets:
+        message_ids = data.get('message_ids', [])
+        conversation_id = data.get('conversation_id')
+        if message_ids:
+            await db.messages.update_many(
+                {'message_id': {'$in': message_ids}},
+                {'$addToSet': {'read_by': user_sockets[sid]}}
+            )
+            await sio.emit('messages_read_batch', {
+                'message_ids': message_ids,
+                'user_id': user_sockets[sid]
+            }, room=conversation_id)
+
+@sio.on('add_reaction')
+async def add_reaction(sid, data):
+    if sid in user_sockets:
+        user_id = user_sockets[sid]
+        msg_id, emoji, conv_id = data.get('message_id'), data.get('emoji'), data.get('conversation_id')
+        if msg_id and emoji:
+            reaction = {'user_id': user_id, 'emoji': emoji}
+            await db.messages.update_one(
+                {'message_id': msg_id},
+                {'$addToSet': {'reactions': reaction}}
+            )
+            await sio.emit('reaction_added', {
+                'message_id': msg_id,
+                'user_id': user_id,
+                'emoji': emoji
+            }, room=conv_id)
+
+@sio.on('remove_reaction')
+async def remove_reaction(sid, data):
+    if sid in user_sockets:
+        user_id = user_sockets[sid]
+        msg_id, emoji, conv_id = data.get('message_id'), data.get('emoji'), data.get('conversation_id')
+        if msg_id and emoji:
+            reaction = {'user_id': user_id, 'emoji': emoji}
+            await db.messages.update_one(
+                {'message_id': msg_id},
+                {'$pull': {'reactions': reaction}}
+            )
+            await sio.emit('reaction_removed', {
+                'message_id': msg_id,
+                'user_id': user_id,
+                'emoji': emoji
+            }, room=conv_id)
 
 @sio.on('call_user')
 async def call_user(sid, data):

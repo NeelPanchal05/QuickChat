@@ -23,6 +23,10 @@ GMAIL_EMAIL = os.getenv('GMAIL_EMAIL', '')
 GMAIL_PASSWORD = os.getenv('GMAIL_PASSWORD', '')
 SENDER_EMAIL = os.getenv('SENDER_EMAIL', GMAIL_EMAIL)
 
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+VAPID_CLAIMS_EMAIL = os.getenv('VAPID_CLAIMS_EMAIL', 'mailto:' + SENDER_EMAIL)
+
 logger = logging.getLogger(__name__)
 
 def generate_otp():

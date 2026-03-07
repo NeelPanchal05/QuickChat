@@ -8,7 +8,8 @@ from models import ConversationCreate
 from dependencies import get_current_user
 from spam_protection import spam_protection
 from encryption import encrypt_message, decrypt_message
-from socket_instance import sio
+from socket_instance import sio, active_users
+from push_service import send_push_notification
 
 router = APIRouter(prefix="/api", tags=["Chat"])
 
@@ -109,6 +110,7 @@ async def save_attachment_message(
     message_type: str = Body(...), 
     file_name: str = Body(default=None),
     temp_id: Optional[str] = Body(default=None),
+    reply_to: Optional[str] = Body(default=None),
     current_user: dict = Depends(get_current_user)
 ):
     is_spam, reason = spam_protection.check_spam(current_user['user_id'])
@@ -126,7 +128,9 @@ async def save_attachment_message(
         'message_type': message_type,
         'file_name': file_name,
         'timestamp': datetime.now(timezone.utc).isoformat(),
-        'read_by': [current_user['user_id']]
+        'read_by': [current_user['user_id']],
+        'reply_to': reply_to,
+        'reactions': []
     }
     await db.messages.insert_one(doc)
     await db.conversations.update_one({'conversation_id': conversation_id}, {'$set': {'updated_at': doc['timestamp']}})
@@ -138,6 +142,17 @@ async def save_attachment_message(
         response_doc['temp_id'] = temp_id
     await sio.emit('new_message', response_doc, room=conversation_id)
     
+    conv = await db.conversations.find_one({'conversation_id': conversation_id})
+    if conv:
+        other_id = next((p for p in conv.get('participants', []) if p != current_user['user_id']), None)
+        if other_id and other_id not in active_users:
+            sender_name = current_user.get('real_name', 'Someone')
+            await send_push_notification(other_id, {
+                "title": sender_name,
+                "body": f"Sent a {message_type}",
+                "data": { "url": f"/?chat={conversation_id}" } 
+            })
+
     return {k: v for k, v in doc.items() if k != '_id'}
 
 @router.put('/conversations/{conversation_id}/archive')

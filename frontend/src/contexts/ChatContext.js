@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useChatSocket } from '@/hooks/useChatSocket';
 import { useSound } from './SoundContext';
+import { useChatStore } from '@/hooks/useChatStore';
 
 const ChatContext = createContext(null);
 
@@ -17,24 +18,28 @@ export const ChatProvider = ({ children }) => {
   const { user, socket, API, token } = useAuth();
   const { playNotificationSound } = useSound();
 
-  // Data States
-  const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
-  
-  // Call States
-  const [callData, setCallData] = useState(null);
-  const [showCall, setShowCall] = useState(false);
-  
-  // Typing State
-  const [typing, setTyping] = useState(null);
-  
-  // Loading States
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [hasMoreMessages, setHasMoreMessages] = useState(true);
-  
-  const messagesEndRef = useRef(null);
+  // Extract from Zustand store
+  const conversations = useChatStore(state => state.conversations);
+  const setConversations = useChatStore(state => state.setConversations);
+  const selectedConversation = useChatStore(state => state.selectedConversation);
+  const setSelectedConversation = useChatStore(state => state.setSelectedConversation);
+  const messages = useChatStore(state => state.messages);
+  const setMessages = useChatStore(state => state.setMessages);
+  const onlineUsers = useChatStore(state => state.onlineUsers);
+  const setOnlineUsers = useChatStore(state => state.setOnlineUsers);
+  const callData = useChatStore(state => state.callData);
+  const setCallData = useChatStore(state => state.setCallData);
+  const showCall = useChatStore(state => state.showCall);
+  const setShowCall = useChatStore(state => state.setShowCall);
+  const typing = useChatStore(state => state.typing);
+  const setTyping = useChatStore(state => state.setTyping);
+  const isLoadingMessages = useChatStore(state => state.isLoadingMessages);
+  const setIsLoadingMessages = useChatStore(state => state.setIsLoadingMessages);
+  const hasMoreMessages = useChatStore(state => state.hasMoreMessages);
+  const setHasMoreMessages = useChatStore(state => state.setHasMoreMessages);
+  const replyingTo = useChatStore(state => state.replyingTo);
+  const setReplyingTo = useChatStore(state => state.setReplyingTo);
+  const storeAddOptimisticMessage = useChatStore(state => state.addOptimisticMessage);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -49,7 +54,7 @@ export const ChatProvider = ({ children }) => {
     } catch (e) {
       console.error("Failed to fetch conversations");
     }
-  }, [API, token]);
+  }, [API, token, setConversations]);
 
   const fetchMessages = useCallback(
     async (convId, filters = {}, append = false) => {
@@ -81,43 +86,12 @@ export const ChatProvider = ({ children }) => {
         setIsLoadingMessages(false);
       }
     },
-    [API, token]
+    [API, token, setIsLoadingMessages, setHasMoreMessages, setMessages]
   );
 
-  const addOptimisticMessage = useCallback((content, type, fileName = null) => {
-    if (!user || !selectedConversation) return null;
-    const tempId = `temp_${Date.now()}_${Math.random()}`;
-    const optimisticMsg = {
-      message_id: tempId,
-      conversation_id: selectedConversation.conversation_id,
-      sender_id: user.user_id,
-      content: content,
-      message_type: type,
-      file_name: fileName,
-      timestamp: new Date().toISOString(),
-      read_by: [user.user_id],
-    };
-
-    setMessages((prev) => [...prev, optimisticMsg]);
-
-    setConversations((prev) => {
-      const updated = prev.map((c) => {
-        if (c.conversation_id === selectedConversation.conversation_id) {
-          return {
-            ...c,
-            last_message: optimisticMsg,
-            updated_at: optimisticMsg.timestamp,
-          };
-        }
-        return c;
-      });
-      return updated.sort(
-        (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
-      );
-    });
-
-    return tempId;
-  }, [user, selectedConversation]);
+  const addOptimisticMessage = useCallback((content, type, fileName = null, replyToId = null) => {
+    return storeAddOptimisticMessage(content, type, fileName, replyToId, user, selectedConversation);
+  }, [storeAddOptimisticMessage, user, selectedConversation]);
 
   // Initialize socket listeners
   useChatSocket({
@@ -138,13 +112,6 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
-
-  // Auto-scroll to the bottom of the messages
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
 
   // Fetch messages when a conversation is selected 
   useEffect(() => {
@@ -171,7 +138,8 @@ export const ChatProvider = ({ children }) => {
     typing,
     isLoadingMessages,
     hasMoreMessages,
-    messagesEndRef,
+    replyingTo,
+    setReplyingTo,
     fetchConversations,
     fetchMessages,
     addOptimisticMessage
