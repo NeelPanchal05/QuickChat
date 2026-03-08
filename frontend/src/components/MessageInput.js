@@ -9,12 +9,15 @@ import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { encryptMessage } from "@/utils/encryption";
+import compressImage from '@/utils/compressImage';
 
 export default function MessageInput({ isCurrentChatBlocked }) {
   const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
   const { t } = useLanguage();
   const { user, socket, API, token } = useAuth();
   const { selectedConversation, addOptimisticMessage, replyingTo, setReplyingTo, setUploadProgress, clearUploadProgress } = useChat();
+  const { addOfflineAction } = import('@/hooks/useChatStore').then(m => m.useChatStore.getState()); // We'll get it directly from hook below
+
 
   const [messageInput, setMessageInput] = useState("");
   const [attachedFiles, setAttachedFiles] = useState([]);
@@ -39,7 +42,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
     }
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     
     // Validate limits
@@ -55,7 +58,25 @@ export default function MessageInput({ isCurrentChatBlocked }) {
       return;
     }
 
-    files.forEach((file) => {
+    setShowMediaUploader(false);
+
+    for (let file of files) {
+      if (file.type.startsWith('image/')) {
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+        };
+        try {
+          const toastId = toast.loading(`Compressing ${file.name}...`);
+          file = await compressImage(file, options);
+          toast.dismiss(toastId);
+        } catch (error) {
+          console.error("Compression failed:", error);
+          toast.error(`Compression failed for ${file.name}`);
+        }
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
         setAttachedFiles((prev) => [
@@ -70,9 +91,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
         ]);
       };
       reader.readAsDataURL(file);
-    });
-    
-    setShowMediaUploader(false);
+    }
   };
 
   const sendMessage = async () => {
@@ -90,13 +109,24 @@ export default function MessageInput({ isCurrentChatBlocked }) {
       const tempId = addOptimisticMessage(messageInput, "text", null, replyingTo?.message_id);
       const encryptedContent = encryptMessage(messageInput, myPrivateKey, theirPublicKey);
       
-      socket?.emit("send_message", {
+      const payload = {
         conversation_id: selectedConversation.conversation_id,
         content: encryptedContent,
         message_type: "text",
         temp_id: tempId,
         reply_to: replyingTo?.message_id
-      });
+      };
+
+      if (socket?.connected) {
+        socket.emit("send_message", payload);
+      } else {
+        addOfflineAction({
+          id: tempId,
+          type: 'send_message',
+          payload: payload
+        });
+        toast.info("You're offline. Message queued.");
+      }
     }
 
     for (const file of attachedFiles) {
@@ -149,12 +179,23 @@ export default function MessageInput({ isCurrentChatBlocked }) {
         const theirPublicKey = selectedConversation.other_user?.public_key;
         const encryptedLocation = encryptMessage(locationUrl, myPrivateKey, theirPublicKey);
         
-        socket?.emit("send_message", {
+        const payload = {
           conversation_id: selectedConversation.conversation_id,
           content: encryptedLocation,
           message_type: "location",
           temp_id: tempId,
-        });
+        };
+        
+        if (socket?.connected) {
+          socket.emit("send_message", payload);
+        } else {
+          addOfflineAction({
+            id: tempId,
+            type: 'send_message',
+            payload: payload
+          });
+          toast.info("You're offline. Location queued.");
+        }
       },
       () => toast.error("Unable to retrieve location")
     );

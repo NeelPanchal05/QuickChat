@@ -1,6 +1,9 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-export const useChatStore = create((set, get) => ({
+export const useChatStore = create(
+  persist(
+    (set, get) => ({
   conversations: [],
   selectedConversation: null,
   messages: [],
@@ -11,6 +14,16 @@ export const useChatStore = create((set, get) => ({
   isLoadingMessages: false,
   hasMoreMessages: true,
   replyingTo: null,
+
+  // Offline queue for actions (like send_message)
+  offlineActionQueue: [],
+  addOfflineAction: (action) => set((state) => ({
+    offlineActionQueue: [...state.offlineActionQueue, action]
+  })),
+  clearOfflineActions: () => set({ offlineActionQueue: [] }),
+  removeOfflineAction: (id) => set((state) => ({
+    offlineActionQueue: state.offlineActionQueue.filter(a => a.id !== id)
+  })),
 
   setConversations: (conversations) => set({ conversations }),
   setSelectedConversation: (conversation) => set({ selectedConversation: conversation }),
@@ -85,4 +98,9 @@ export const useChatStore = create((set, get) => ({
 
     return tempId;
   }
+}),
+{
+  name: 'chat-store', // key in local storage
+  // Only persist the offlineActionQueue
+  partialize: (state) => ({ offlineActionQueue: state.offlineActionQueue }),
 }));

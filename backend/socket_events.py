@@ -6,7 +6,12 @@ from encryption import encrypt_message
 from spam_protection import spam_protection, is_spam_message
 from socket_instance import sio, active_users, user_sockets
 from push_service import send_push_notification
-
+from models import (
+    SendMessageEvent, TypingEvent, MessageReadEvent, 
+    MessagesReadBatchEvent, ReactionEvent, CallUserEvent, 
+    AcceptCallEvent, RejectCallEvent, EndCallEvent
+)
+from pydantic import ValidationError
 @sio.on('connect')
 async def connect(sid, environ, auth):
     if not auth or 'token' not in auth: return False
@@ -39,6 +44,12 @@ async def handle_message(sid, data):
     if sid not in user_sockets: return
     user_id = user_sockets[sid]
     
+    try:
+        validated_data = SendMessageEvent(**data)
+    except ValidationError as e:
+        await sio.emit('error', {'message': 'Invalid payload format'}, to=sid)
+        return
+
     is_spam, reason = spam_protection.check_spam(user_id)
     if is_spam:
         await sio.emit('error', {'message': reason}, to=sid)
@@ -62,8 +73,8 @@ async def handle_message(sid, data):
             await sio.emit('error', {'message': 'You have blocked this user. Unblock to send messages.'}, to=sid)
             return
 
-    content = data.get('content', '')
-    msg_type = data.get('message_type', 'text')
+    content = validated_data.content
+    msg_type = validated_data.message_type
     
     # Avoid scanning attachments/base64 blobs which might crash the spam filter
     if msg_type == 'text':
@@ -81,10 +92,10 @@ async def handle_message(sid, data):
         'sender_id': user_id,
         'content': encrypted_content,
         'message_type': msg_type,
-        'file_name': data.get('file_name'),
+        'file_name': validated_data.file_name,
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'read_by': [user_id],
-        'reply_to': data.get('reply_to'),
+        'reply_to': validated_data.reply_to,
         'reactions': []
     }
     
@@ -97,7 +108,7 @@ async def handle_message(sid, data):
     response_doc = doc.copy()
     response_doc['content'] = content
     response_doc.pop('_id', None)
-    temp_id = data.get('temp_id')
+    temp_id = validated_data.temp_id
     if temp_id:
         response_doc['temp_id'] = temp_id
     
@@ -114,22 +125,30 @@ async def handle_message(sid, data):
 @sio.on('typing')
 async def handle_typing(sid, data):
     if sid in user_sockets:
-        await sio.emit('user_typing', {
-            'user_id': user_sockets[sid],
-            'conversation_id': data.get('conversation_id')
-        }, room=data.get('conversation_id'), skip_sid=sid)
+        try:
+            validated_data = TypingEvent(**data)
+            await sio.emit('user_typing', {
+                'user_id': user_sockets[sid],
+                'conversation_id': validated_data.conversation_id
+            }, room=validated_data.conversation_id, skip_sid=sid)
+        except ValidationError:
+            pass
 
 @sio.on('message_read')
 async def handle_read(sid, data):
     if sid in user_sockets:
-        await db.messages.update_one(
-            {'message_id': data.get('message_id')}, 
-            {'$addToSet': {'read_by': user_sockets[sid]}}
-        )
-        await sio.emit('message_read', {
-            'message_id': data.get('message_id'), 
-            'user_id': user_sockets[sid]
-        }, room=data.get('conversation_id'))
+        try:
+            val = MessageReadEvent(**data)
+            await db.messages.update_one(
+                {'message_id': val.message_id}, 
+                {'$addToSet': {'read_by': user_sockets[sid]}}
+            )
+            await sio.emit('message_read', {
+                'message_id': val.message_id, 
+                'user_id': user_sockets[sid]
+            }, room=val.conversation_id)
+        except ValidationError:
+            pass
 
 @sio.on('messages_read_batch')
 async def handle_read_batch(sid, data):
@@ -149,63 +168,81 @@ async def handle_read_batch(sid, data):
 @sio.on('add_reaction')
 async def add_reaction(sid, data):
     if sid in user_sockets:
-        user_id = user_sockets[sid]
-        msg_id, emoji, conv_id = data.get('message_id'), data.get('emoji'), data.get('conversation_id')
-        if msg_id and emoji:
-            reaction = {'user_id': user_id, 'emoji': emoji}
+        try:
+            val = ReactionEvent(**data)
+            user_id = user_sockets[sid]
+            reaction = {'user_id': user_id, 'emoji': val.emoji}
             await db.messages.update_one(
-                {'message_id': msg_id},
+                {'message_id': val.message_id},
                 {'$addToSet': {'reactions': reaction}}
             )
             await sio.emit('reaction_added', {
-                'message_id': msg_id,
+                'message_id': val.message_id,
                 'user_id': user_id,
-                'emoji': emoji
-            }, room=conv_id)
+                'emoji': val.emoji
+            }, room=val.conversation_id)
+        except ValidationError:
+            pass
 
 @sio.on('remove_reaction')
 async def remove_reaction(sid, data):
     if sid in user_sockets:
-        user_id = user_sockets[sid]
-        msg_id, emoji, conv_id = data.get('message_id'), data.get('emoji'), data.get('conversation_id')
-        if msg_id and emoji:
-            reaction = {'user_id': user_id, 'emoji': emoji}
+        try:
+            val = ReactionEvent(**data)
+            user_id = user_sockets[sid]
+            reaction = {'user_id': user_id, 'emoji': val.emoji}
             await db.messages.update_one(
-                {'message_id': msg_id},
+                {'message_id': val.message_id},
                 {'$pull': {'reactions': reaction}}
             )
             await sio.emit('reaction_removed', {
-                'message_id': msg_id,
+                'message_id': val.message_id,
                 'user_id': user_id,
-                'emoji': emoji
-            }, room=conv_id)
+                'emoji': val.emoji
+            }, room=val.conversation_id)
+        except ValidationError:
+            pass
 
 @sio.on('call_user')
 async def call_user(sid, data):
     if sid not in user_sockets: return
-    callee_id = data.get('callee_id')
-    if callee_id in active_users:
-        caller = await db.users.find_one({'user_id': user_sockets[sid]}, {'_id':0})
-        await sio.emit('incoming_call', {
-            'caller': caller, 'caller_id': user_sockets[sid],
-            'signal': data.get('signal'), 'call_type': data.get('call_type')
-        }, room=active_users[callee_id])
+    try:
+        val = CallUserEvent(**data)
+        if val.callee_id in active_users:
+            caller = await db.users.find_one({'user_id': user_sockets[sid]}, {'_id':0})
+            await sio.emit('incoming_call', {
+                'caller': caller, 'caller_id': user_sockets[sid],
+                'signal': val.signal, 'call_type': val.call_type
+            }, room=active_users[val.callee_id])
+    except ValidationError:
+        pass
 
 @sio.on('accept_call')
 async def accept_call(sid, data):
-    if data.get('caller_id') in active_users:
-        await sio.emit('call_accepted', {
-            'callee_id': user_sockets[sid], 'signal': data.get('signal')
-        }, room=active_users[data.get('caller_id')])
+    try:
+        val = AcceptCallEvent(**data)
+        if val.caller_id in active_users:
+            await sio.emit('call_accepted', {
+                'callee_id': user_sockets[sid], 'signal': val.signal
+            }, room=active_users[val.caller_id])
+    except ValidationError:
+        pass
 
 @sio.on('reject_call')
 async def reject_call(sid, data):
-    if data.get('caller_id') in active_users:
-        await sio.emit('call_rejected', {}, room=active_users[data.get('caller_id')])
+    try:
+        val = RejectCallEvent(**data)
+        if val.caller_id in active_users:
+            await sio.emit('call_rejected', {}, room=active_users[val.caller_id])
+    except ValidationError:
+        pass
 
 @sio.on('end_call')
 async def end_call(sid, data):
     if sid not in user_sockets: return
-    other_user_id = data.get('other_user_id')
-    if other_user_id in active_users:
-        await sio.emit('call_ended', {}, room=active_users[other_user_id])
+    try:
+        val = EndCallEvent(**data)
+        if val.other_user_id in active_users:
+            await sio.emit('call_ended', {}, room=active_users[val.other_user_id])
+    except ValidationError:
+        pass

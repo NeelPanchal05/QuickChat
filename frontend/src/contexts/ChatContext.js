@@ -49,6 +49,9 @@ export const ChatProvider = ({ children }) => {
   const setDownloadProgress = useChatStore(state => state.setDownloadProgress);
   const clearDownloadProgress = useChatStore(state => state.clearDownloadProgress);
 
+  const offlineActionQueue = useChatStore(state => state.offlineActionQueue);
+  const removeOfflineAction = useChatStore(state => state.removeOfflineAction);
+
   const fetchConversations = useCallback(async () => {
     try {
       if (!token) return;
@@ -109,6 +112,18 @@ export const ChatProvider = ({ children }) => {
     fetchMessages,
     playNotificationSound,
   });
+
+  // Flush offline queue when socket reconnects
+  useEffect(() => {
+    if (socket?.connected && offlineActionQueue.length > 0) {
+      offlineActionQueue.forEach(action => {
+        if (action.type === 'send_message') {
+          socket.emit('send_message', action.payload);
+          removeOfflineAction(action.id);
+        }
+      });
+    }
+  }, [socket?.connected, offlineActionQueue, removeOfflineAction, socket]);
 
   // Fetch conversations on mount / when token changes
   useEffect(() => {

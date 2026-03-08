@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Response, Request
+from fastapi import APIRouter, HTTPException, Depends, Response, Request, BackgroundTasks
 from datetime import datetime, timedelta, timezone
 
 from database import db
@@ -8,13 +8,13 @@ from utils import (
     create_access_token, create_refresh_token, send_email_func
 )
 from dependencies import get_current_user
-from rate_limiter import limiter
+from rate_limiter import limiter, redis_client
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 @router.post('/register')
 @limiter.limit("5/minute")
-async def register(request: Request, user_data: UserRegister):
+async def register(request: Request, user_data: UserRegister, background_tasks: BackgroundTasks):
     existing = await db.users.find_one({
         '$or': [{'email': user_data.email}, {'username': user_data.username}]
     })
@@ -24,12 +24,24 @@ async def register(request: Request, user_data: UserRegister):
     otp = generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     
-    await db.otps.delete_many({'email': user_data.email})
-    await db.otps.insert_one({
-        'email': user_data.email,
-        'otp': otp,
-        'expires_at': expires_at.isoformat()
-    })
+    if redis_client:
+        try:
+            # 600 seconds = 10 minutes
+            redis_client.setex(f"otp:{user_data.email}", 600, otp)
+        except Exception:
+            await db.otps.delete_many({'email': user_data.email})
+            await db.otps.insert_one({
+                'email': user_data.email,
+                'otp': otp,
+                'expires_at': expires_at.isoformat()
+            })
+    else:
+        await db.otps.delete_many({'email': user_data.email})
+        await db.otps.insert_one({
+            'email': user_data.email,
+            'otp': otp,
+            'expires_at': expires_at.isoformat()
+        })
     
     await db.pending_users.delete_many({'email': user_data.email})
     await db.pending_users.insert_one({
@@ -43,21 +55,30 @@ async def register(request: Request, user_data: UserRegister):
     })
     
     html = f"<h2>Welcome to QuickChat!</h2><p>Your OTP is: <b>{otp}</b></p>"
-    email_sent = await send_email_func(user_data.email, "QuickChat - Verification Code", html)
     
-    if not email_sent:
-        await db.otps.delete_many({'email': user_data.email})
-        await db.pending_users.delete_many({'email': user_data.email})
-        raise HTTPException(status_code=500, detail='Failed to send OTP email. Please check your email address or try again later.')
+    # Send email in the background so the user gets an immediate response
+    background_tasks.add_task(send_email_func, user_data.email, "QuickChat - Verification Code", html)
     
     return {'message': 'OTP sent'}
 
 @router.post('/verify-otp')
 @limiter.limit("5/minute")
 async def verify_otp(request: Request, data: OTPVerify, response: Response):
-    otp_doc = await db.otps.find_one({'email': data.email})
-    if not otp_doc or datetime.fromisoformat(otp_doc['expires_at']) < datetime.now(timezone.utc) or otp_doc['otp'] != data.otp:
-        raise HTTPException(status_code=400, detail='Invalid or expired OTP')
+    otp_valid = False
+    if redis_client:
+        try:
+            stored_otp = redis_client.get(f"otp:{data.email}")
+            if stored_otp and stored_otp.decode('utf-8') == data.otp:
+                otp_valid = True
+                redis_client.delete(f"otp:{data.email}")
+        except Exception:
+            pass
+
+    if not otp_valid:
+        otp_doc = await db.otps.find_one({'email': data.email})
+        if not otp_doc or datetime.fromisoformat(otp_doc['expires_at']) < datetime.now(timezone.utc) or otp_doc['otp'] != data.otp:
+            raise HTTPException(status_code=400, detail='Invalid or expired OTP')
+        await db.otps.delete_many({'email': data.email})
     
     pending = await db.pending_users.find_one({'email': data.email})
     if not pending:
@@ -81,7 +102,7 @@ async def verify_otp(request: Request, data: OTPVerify, response: Response):
     }
     
     await db.users.insert_one(user_doc)
-    await db.otps.delete_many({'email': data.email})
+    await db.pending_users.delete_many({'email': data.email})
     await db.pending_users.delete_many({'email': data.email})
     
     access_token = create_access_token({'sub': user_id})

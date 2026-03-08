@@ -32,3 +32,42 @@ class ConversationCreate(BaseModel):
 
 class InviteFriend(BaseModel):
     email: EmailStr
+
+class SendMessageEvent(BaseModel):
+    conversation_id: str
+    content: Optional[str] = ''
+    message_type: Optional[str] = 'text'
+    file_name: Optional[str] = None
+    reply_to: Optional[str] = None
+    temp_id: Optional[str] = None
+
+class TypingEvent(BaseModel):
+    conversation_id: str
+
+class MessageReadEvent(BaseModel):
+    message_id: str
+    conversation_id: str
+
+class MessagesReadBatchEvent(BaseModel):
+    message_ids: list[str]
+    conversation_id: str
+
+class ReactionEvent(BaseModel):
+    message_id: str
+    conversation_id: str
+    emoji: str
+
+class CallUserEvent(BaseModel):
+    callee_id: str
+    signal: dict
+    call_type: str
+
+class AcceptCallEvent(BaseModel):
+    caller_id: str
+    signal: dict
+
+class RejectCallEvent(BaseModel):
+    caller_id: str
+
+class EndCallEvent(BaseModel):
+    other_user_id: str

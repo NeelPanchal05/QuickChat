@@ -16,17 +16,13 @@ const fields = [
   { name: "password",   label: "Password",   icon: Lock,   type: "password", placeholder: "Create a strong password",     testId: "password-input" },
 ];
 
-export default function Register() {
+function RegisterForm({ containerRef }) {
   const navigate = useNavigate();
   const { register } = useAuth();
   const [formData, setFormData] = useState({ email: "", username: "", password: "", real_name: "", unique_id: "" });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const containerRef = useRef(null);
-
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t); }, []);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -45,6 +41,88 @@ export default function Register() {
     }
   };
 
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      {fields.map((f, i) => (
+        <div key={f.name} className="animate-slide-up" style={{ animationDelay: `${0.04 + i * 0.04}s` }}>
+          <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1.5 block" style={{ color: 'rgba(167,139,250,0.7)' }}>
+            <f.icon size={11} /> {f.label}
+          </label>
+          <div className="relative field-focus-ring">
+            <Input
+              name={f.name}
+              id={f.name}
+              data-testid={f.testId}
+              type={f.name === "password" ? (showPassword ? "text" : "password") : f.type}
+              value={formData[f.name]}
+              onChange={handleChange}
+              placeholder={f.placeholder}
+              className="auth-input h-11 rounded-xl text-white text-sm w-full"
+              required
+            />
+            {f.name === "password" && (
+              <button type="button" onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 icon-btn-hover p-1"
+                style={{ color: 'rgba(167,139,250,0.6)' }}>
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Terms */}
+      <div className="flex items-start gap-3 pt-1 animate-fade-in stagger-5">
+        <div
+          className="w-5 h-5 rounded mt-0.5 flex-shrink-0 flex items-center justify-center cursor-pointer transition-all duration-200"
+          style={{
+            background: acceptedTerms ? 'linear-gradient(135deg,#7c3aed,#4f46e5)' : 'transparent',
+            border: `1.5px solid ${acceptedTerms ? '#7c3aed' : 'rgba(255,255,255,0.2)'}`,
+            boxShadow: acceptedTerms ? '0 0 10px rgba(124,58,237,0.4)' : 'none',
+          }}
+          onClick={() => setAcceptedTerms(v => !v)}
+        >
+          {acceptedTerms && (
+            <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+              <path d="M1 4.5L4 7.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>
+        <label className="text-xs leading-snug cursor-pointer" style={{ color: 'rgba(255,255,255,0.45)' }} onClick={() => setAcceptedTerms(v => !v)}>
+          I agree to the{" "}
+          <span style={{ color: '#a78bfa' }}>Terms and Conditions</span> and{" "}
+          <span style={{ color: '#a78bfa' }}>Privacy Policy</span>
+        </label>
+      </div>
+
+      {/* Submit */}
+      <div className="pt-1 animate-slide-up stagger-6">
+        <button
+          type="submit"
+          data-testid="register-button"
+          disabled={loading || !acceptedTerms}
+          className="ripple-btn w-full h-12 rounded-xl text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', boxShadow: '0 4px 24px rgba(124,58,237,0.4)', fontFamily: "'Space Grotesk', sans-serif", willChange: 'transform' }}
+        >
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" style={{ animation: 'spin360 0.7s linear infinite' }} />
+              Creating account…
+            </span>
+          ) : "Create Account"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export default function Register() {
+  const navigate = useNavigate();
+  const [mounted, setMounted] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t); }, []);
+
   const memoizedBackground = useMemo(() => (
     <>
       {/* Overlay */}
@@ -52,9 +130,9 @@ export default function Register() {
 
       {/* Orbs */}
       <div className="absolute top-1/3 left-1/5 w-72 h-72 rounded-full pointer-events-none animate-orb-float"
-        style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)', filter: 'blur(50px)' }} />
+        style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)', filter: 'blur(50px)', willChange: 'transform' }} />
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 70%)', filter: 'blur(60px)', animation: 'orbFloat 12s ease-in-out infinite reverse' }} />
+        style={{ background: 'radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 70%)', filter: 'blur(60px)', animation: 'orbFloat 12s ease-in-out infinite reverse', willChange: 'transform' }} />
     </>
   ), []);
 
@@ -105,77 +183,7 @@ export default function Register() {
           </div>
           <p className="text-xs text-center mb-6 animate-fade-in stagger-1" style={{ color: 'rgba(255,255,255,0.38)' }}>Join thousands chatting securely</p>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {fields.map((f, i) => (
-              <div key={f.name} className="animate-slide-up" style={{ animationDelay: `${0.04 + i * 0.04}s` }}>
-                <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1.5 block" style={{ color: 'rgba(167,139,250,0.7)' }}>
-                  <f.icon size={11} /> {f.label}
-                </label>
-                <div className="relative field-focus-ring">
-                  <Input
-                    name={f.name}
-                    id={f.name}
-                    data-testid={f.testId}
-                    type={f.name === "password" ? (showPassword ? "text" : "password") : f.type}
-                    value={formData[f.name]}
-                    onChange={handleChange}
-                    placeholder={f.placeholder}
-                    className="auth-input h-11 rounded-xl text-white text-sm w-full"
-                    required
-                  />
-                  {f.name === "password" && (
-                    <button type="button" onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 icon-btn-hover p-1"
-                      style={{ color: 'rgba(167,139,250,0.6)' }}>
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {/* Terms */}
-            <div className="flex items-start gap-3 pt-1 animate-fade-in stagger-5">
-              <div
-                className="w-5 h-5 rounded mt-0.5 flex-shrink-0 flex items-center justify-center cursor-pointer transition-all duration-200"
-                style={{
-                  background: acceptedTerms ? 'linear-gradient(135deg,#7c3aed,#4f46e5)' : 'transparent',
-                  border: `1.5px solid ${acceptedTerms ? '#7c3aed' : 'rgba(255,255,255,0.2)'}`,
-                  boxShadow: acceptedTerms ? '0 0 10px rgba(124,58,237,0.4)' : 'none',
-                }}
-                onClick={() => setAcceptedTerms(v => !v)}
-              >
-                {acceptedTerms && (
-                  <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
-                    <path d="M1 4.5L4 7.5L10 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </div>
-              <label className="text-xs leading-snug cursor-pointer" style={{ color: 'rgba(255,255,255,0.45)' }} onClick={() => setAcceptedTerms(v => !v)}>
-                I agree to the{" "}
-                <span style={{ color: '#a78bfa' }}>Terms and Conditions</span> and{" "}
-                <span style={{ color: '#a78bfa' }}>Privacy Policy</span>
-              </label>
-            </div>
-
-            {/* Submit */}
-            <div className="pt-1 animate-slide-up stagger-6">
-              <button
-                type="submit"
-                data-testid="register-button"
-                disabled={loading || !acceptedTerms}
-                className="ripple-btn w-full h-12 rounded-xl text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', boxShadow: '0 4px 24px rgba(124,58,237,0.4)', fontFamily: "'Space Grotesk', sans-serif" }}
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" style={{ animation: 'spin360 0.7s linear infinite' }} />
-                    Creating account…
-                  </span>
-                ) : "Create Account"}
-              </button>
-            </div>
-          </form>
+          <RegisterForm containerRef={containerRef} />
 
           <p className="text-center mt-5 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
             Already have an account?{" "}

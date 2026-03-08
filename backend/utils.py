@@ -51,7 +51,7 @@ def create_refresh_token(data: dict):
     to_encode.update({'exp': expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-async def send_email_func(to_email: str, subject: str, html_content: str):
+def send_email_func(to_email: str, subject: str, html_content: str):
     try:
         message = MIMEMultipart('alternative')
         message['Subject'] = subject
@@ -60,12 +60,10 @@ async def send_email_func(to_email: str, subject: str, html_content: str):
         part = MIMEText(html_content, 'html')
         message.attach(part)
         
-        def send():
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-                server.login(GMAIL_EMAIL, GMAIL_PASSWORD)
-                server.sendmail(SENDER_EMAIL, [to_email], message.as_string())
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(GMAIL_EMAIL, GMAIL_PASSWORD)
+            server.sendmail(SENDER_EMAIL, [to_email], message.as_string())
         
-        await asyncio.to_thread(lambda: send())
         return True
     except Exception as e:
         logger.error(f"Email failed: {e}")
