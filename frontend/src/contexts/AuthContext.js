@@ -44,6 +44,11 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(!cachedUser || !localStorage.getItem("token"));
   const [socket, setSocket] = useState(null);
 
+  const updateUser = useCallback((newUser) => {
+    setUser(newUser);
+    setCachedUser(newUser);
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem("token");
     clearCachedUser();
@@ -183,6 +188,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        updateUser,
         token,
         login,
         register,

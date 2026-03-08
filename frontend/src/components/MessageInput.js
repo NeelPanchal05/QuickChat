@@ -10,13 +10,14 @@ import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { encryptMessage } from "@/utils/encryption";
 import compressImage from '@/utils/compressImage';
+import { useChatStore } from "@/hooks/useChatStore";
 
 export default function MessageInput({ isCurrentChatBlocked }) {
   const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
   const { t } = useLanguage();
   const { user, socket, API, token } = useAuth();
   const { selectedConversation, addOptimisticMessage, replyingTo, setReplyingTo, setUploadProgress, clearUploadProgress } = useChat();
-  const { addOfflineAction } = import('@/hooks/useChatStore').then(m => m.useChatStore.getState()); // We'll get it directly from hook below
+  const addOfflineAction = useChatStore((state) => state.addOfflineAction);
 
 
   const [messageInput, setMessageInput] = useState("");

@@ -150,8 +150,13 @@ async def login(request: Request, data: UserLogin, response: Response):
 
 @router.get('/me')
 async def get_me(current_user: dict = Depends(get_current_user)):
-    # current_user from dependencies.py already excludes profile_photo, bio, password_hash
-    return current_user
+    # Fetch full user to include profile_photo and bio which are excluded in get_current_user
+    full_user = await db.users.find_one({'user_id': current_user['user_id']}, {'_id': 0, 'password_hash': 0})
+    if not full_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if 'blocked_users' not in full_user:
+        full_user['blocked_users'] = []
+    return full_user
 
 @router.post('/change-password')
 async def change_password(data: ChangePassword, current_user: dict = Depends(get_current_user)):
