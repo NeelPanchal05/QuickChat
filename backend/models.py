@@ -71,3 +71,7 @@ class RejectCallEvent(BaseModel):
 
 class EndCallEvent(BaseModel):
     other_user_id: str
+
+class IceCandidateEvent(BaseModel):
+    target_id: str
+    candidate: dict

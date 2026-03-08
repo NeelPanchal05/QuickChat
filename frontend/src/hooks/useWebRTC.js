@@ -14,10 +14,13 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerRef = useRef(null);
+  const iceQueueRef = useRef([]);
+  const isCanceledRef = useRef(false);
   
   const { callType, otherUser, incoming, caller, signal } = callData;
 
   const cleanupCall = useCallback(() => {
+    isCanceledRef.current = true;
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
     }
@@ -51,7 +54,11 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
   }, [onClose]);
 
   const handleIceCandidate = useCallback((data) => {
-    // Handle ICE candidates if needed
+    if (peerRef.current) {
+      peerRef.current.signal(data.candidate);
+    } else {
+      iceQueueRef.current.push(data.candidate);
+    }
   }, []);
 
   const startCall = useCallback(async () => {
@@ -71,6 +78,12 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
         },
       });
 
+      // Abort if the user canceled while waiting for camera permissions
+      if (isCanceledRef.current) {
+        mediaStream.getTracks().forEach(t => t.stop());
+        return;
+      }
+
       setStream(mediaStream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = mediaStream;
@@ -78,7 +91,7 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
 
       const peer = new Peer({
         initiator: true,
-        trickle: false,
+        trickle: true,
         stream: mediaStream,
         config: {
           iceServers: [
@@ -92,11 +105,18 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
       });
 
       peer.on("signal", (data) => {
-        socket.emit("call_user", {
-          callee_id: otherUser.user_id,
-          signal: data,
-          call_type: callType,
-        });
+        if (data.type === "offer") {
+          socket.emit("call_user", {
+            callee_id: otherUser.user_id,
+            signal: data,
+            call_type: callType,
+          });
+        } else {
+          socket.emit("ice_candidate", {
+            target_id: otherUser.user_id,
+            candidate: data
+          });
+        }
       });
 
       peer.on("stream", (remoteStream) => {
@@ -114,6 +134,12 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
       });
 
       peerRef.current = peer;
+
+      // Flush queue if any candidates arrived early
+      while (iceQueueRef.current.length > 0) {
+        const candidate = iceQueueRef.current.shift();
+        peer.signal(candidate);
+      }
     } catch (error) {
       console.error("Failed to start call:", error);
       toast.error("Failed to access camera/microphone");
@@ -166,6 +192,11 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
         },
       });
 
+      if (isCanceledRef.current) {
+        mediaStream.getTracks().forEach(t => t.stop());
+        return;
+      }
+
       setStream(mediaStream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = mediaStream;
@@ -173,7 +204,7 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
 
       const peer = new Peer({
         initiator: false,
-        trickle: false,
+        trickle: true,
         stream: mediaStream,
         config: {
           iceServers: [
@@ -187,10 +218,17 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
       });
 
       peer.on("signal", (data) => {
-        socket.emit("accept_call", {
-          caller_id: caller.user_id,
-          signal: data,
-        });
+        if (data.type === "answer") {
+          socket.emit("accept_call", {
+            caller_id: caller.user_id,
+            signal: data,
+          });
+        } else {
+          socket.emit("ice_candidate", {
+            target_id: caller.user_id,
+            candidate: data
+          });
+        }
       });
 
       peer.on("stream", (remoteStream) => {
@@ -207,8 +245,16 @@ export const useWebRTC = ({ callData, socket, onClose }) => {
         endCall();
       });
 
-      peer.signal(signal);
       peerRef.current = peer;
+
+      // Handle the initial offer
+      peer.signal(signal);
+
+      // Flush queue if any candidates arrived early
+      while (iceQueueRef.current.length > 0) {
+        const candidate = iceQueueRef.current.shift();
+        peer.signal(candidate);
+      }
     } catch (error) {
       console.error("Failed to accept call:", error);
       toast.error("Failed to access camera/microphone");

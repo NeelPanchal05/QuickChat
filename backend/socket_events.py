@@ -9,7 +9,8 @@ from push_service import send_push_notification
 from models import (
     SendMessageEvent, TypingEvent, MessageReadEvent, 
     MessagesReadBatchEvent, ReactionEvent, CallUserEvent, 
-    AcceptCallEvent, RejectCallEvent, EndCallEvent
+    AcceptCallEvent, RejectCallEvent, EndCallEvent,
+    IceCandidateEvent
 )
 from pydantic import ValidationError
 @sio.on('connect')
@@ -244,5 +245,18 @@ async def end_call(sid, data):
         val = EndCallEvent(**data)
         if val.other_user_id in active_users:
             await sio.emit('call_ended', {}, room=active_users[val.other_user_id])
+    except ValidationError:
+        pass
+
+@sio.on('ice_candidate')
+async def handle_ice_candidate(sid, data):
+    if sid not in user_sockets: return
+    try:
+        val = IceCandidateEvent(**data)
+        if val.target_id in active_users:
+            await sio.emit('ice_candidate', {
+                'candidate': val.candidate,
+                'sender_id': user_sockets[sid]
+            }, room=active_users[val.target_id])
     except ValidationError:
         pass
