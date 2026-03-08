@@ -1,8 +1,11 @@
-import { forwardRef, useMemo, useRef, useEffect } from 'react';
+import { forwardRef, useMemo, useRef, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 
 function useAnimationFrame(callback) {
+  const [isActive, setIsActive] = useState(true);
+
   useEffect(() => {
+    if (!isActive) return;
     let frameId;
     const loop = () => {
       callback();
@@ -10,7 +13,9 @@ function useAnimationFrame(callback) {
     };
     frameId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frameId);
-  }, [callback]);
+  }, [callback, isActive]);
+
+  return setIsActive;
 }
 
 function useMousePositionRef(containerRef) {
@@ -61,8 +66,9 @@ const VariableProximity = forwardRef((props, ref) => {
   const interpolatedSettingsRef = useRef([]);
   const mousePositionRef = useMousePositionRef(containerRef);
   const lastPositionRef = useRef({ x: null, y: null });
-
-  const parsedSettings = useMemo(() => {
+  const internalRef = useRef(null);
+  
+  const setAnimationActive = useAnimationFrame(() => {
     const parseSettings = settingsStr =>
       new Map(
         settingsStr
@@ -141,12 +147,54 @@ const VariableProximity = forwardRef((props, ref) => {
     });
   });
 
+  const parsedSettings = useMemo(() => {
+    const parseSettings = settingsStr =>
+      new Map(
+        settingsStr
+          .split(',')
+          .map(s => s.trim())
+          .map(s => {
+            const [name, value] = s.split(' ');
+            return [name.replace(/['"]/g, ''), parseFloat(value)];
+          })
+      );
+
+    const fromSettings = parseSettings(fromFontVariationSettings);
+    const toSettings = parseSettings(toFontVariationSettings);
+
+    return Array.from(fromSettings.entries()).map(([axis, fromValue]) => ({
+      axis,
+      fromValue,
+      toValue: toSettings.get(axis) ?? fromValue
+    }));
+  }, [fromFontVariationSettings, toFontVariationSettings]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setAnimationActive(entry.isIntersecting);
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentRef = internalRef.current;
+    if (currentRef) observer.observe(currentRef);
+
+    return () => {
+      if (currentRef) observer.unobserve(currentRef);
+    };
+  }, [setAnimationActive]);
+
   const words = label.split(' ');
   let letterIndex = 0;
 
   return (
     <span
-      ref={ref}
+      ref={(node) => {
+        internalRef.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) ref.current = node;
+      }}
       onClick={onClick}
       style={{
         display: 'inline',

@@ -39,6 +39,224 @@ const formatMessageDate = (timestamp, t) => {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
+// --- Render Optimization: Memoized Row ---
+// We pull this out of the Virtuoso render function and memoize it.
+// This prevents Virtuoso from re-running the extremely expensive O(n) decryptMessage
+// and messages.find() on EVERY scrolling frame!
+const MemoizedMessageRow = React.memo(({ 
+  m, index, messages, user, selectedConversation, t, downloadFile, 
+  uploadProgress, downloadProgress, socket, setReplyingTo
+}) => {
+  const isOwn = user && m.sender_id === user.user_id;
+
+  if (m.message_type === "poll") return null;
+
+  const myPrivateKey = user ? localStorage.getItem(`e2ee_private_key_${user.email}`) : null;
+  const theirPublicKey = selectedConversation?.other_user?.public_key;
+
+  const decryptedContent = decryptMessage(m.content, myPrivateKey, theirPublicKey);
+
+  const repliedMessage = m.reply_to ? messages.find(msg => msg.message_id === m.reply_to) : null;
+  const decryptedRepliedContent = repliedMessage ? decryptMessage(repliedMessage.content, myPrivateKey, theirPublicKey) : null;
+
+  const currentDate = formatMessageDate(m.timestamp, t);
+  const prevDate = index > 0 ? formatMessageDate(messages[index - 1].timestamp, t) : null;
+  const showDateSeparator = currentDate !== prevDate;
+
+  return (
+    <div className="py-1">
+      {showDateSeparator && (
+        <div className="flex w-full justify-center my-5 mb-6 relative z-10 pointer-events-none">
+          <span className="bg-black/50 backdrop-blur-md border border-white/10 text-white/90 text-[11px] py-1 px-4 rounded-full shadow-sm font-medium tracking-wide">
+            {currentDate}
+          </span>
+        </div>
+      )}
+      <div className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-message-in group`}>
+        <div className={`flex flex-col max-w-[72%] ${isOwn ? 'items-end' : 'items-start'}`}>
+          
+          {repliedMessage && (
+            <div className={`text-xs opacity-75 mb-1 px-3 py-1.5 rounded-lg truncate border-l-2 max-w-full cursor-pointer hover:opacity-100 transition-opacity ${isOwn ? 'border-primary/50 bg-primary/10' : 'border-muted-foreground/50 bg-muted/50'}`}>
+              <span className="font-semibold block mb-0.5">{repliedMessage.sender_id === user?.user_id ? "You" : "Them"}:</span>
+              {repliedMessage.message_type === 'text' ? decryptedRepliedContent : `[${repliedMessage.message_type}]`}
+            </div>
+          )}
+
+          <div className={`relative flex items-center gap-2 ${isOwn ? "flex-row-reverse" : "flex-row"} w-full`}>
+            <div className={`px-4 py-2.5 rounded-2xl relative z-10 w-fit ${isOwn ? "bubble-own text-white rounded-tr-sm" : "bubble-other text-foreground rounded-tl-sm"}`}>
+          {m.message_type === "text" && (
+            <p className="text-sm leading-relaxed break-words">{decryptedContent}</p>
+          )}
+          {m.message_type === "location" && (
+            <a
+              href={decryptedContent}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex flex-col items-center justify-center p-4 rounded-xl text-inherit no-underline transition-all"
+              style={{
+                background: isOwn ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.05)',
+                border: isOwn ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.08)'
+              }}
+            >
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mb-2" 
+                style={{ background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(124,58,237,0.15)' }}
+              >
+                <MapPin size={24} className={isOwn ? 'text-white' : 'text-primary'} />
+              </div>
+              <span className="text-sm font-semibold mb-0.5">{t("view_location")}</span>
+              <span className="text-xs opacity-70 underline underline-offset-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-[180px]">
+                {decryptedContent}
+              </span>
+            </a>
+          )}
+          {m.message_type?.startsWith("image") && (
+            <div className="relative group overflow-hidden rounded-xl min-h-[60px] min-w-[100px] bg-black/10">
+              <img src={decryptedContent} alt="attachment" className="w-full max-h-60 object-cover" />
+              <button
+                onClick={() => downloadFile(decryptedContent, m.file_name || "image", m.message_id)}
+                className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all z-10"
+                title="Download Image"
+              >
+                <Download size={14} />
+              </button>
+              {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
+                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center backdrop-blur-sm z-20 transition-all duration-300">
+                  <div className="w-12 h-12 relative flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
+                      <circle cx="24" cy="24" r="20" stroke="white" strokeWidth="3" fill="none" 
+                        strokeDasharray="125.6" 
+                        strokeDashoffset={125.6 - (125.6 * (uploadProgress[m.message_id] ?? downloadProgress[m.message_id])) / 100} 
+                        className="transition-all duration-150 ease-out" />
+                    </svg>
+                    <span className="absolute text-white text-[10px] font-bold">{uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
+            <div className="relative group overflow-hidden rounded-xl min-h-[60px] min-w-[200px] bg-black/10">
+              <video controls src={decryptedContent} className="max-w-full rounded-xl relative z-10" />
+              {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
+                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center backdrop-blur-sm z-20 transition-all duration-300 rounded-xl">
+                  <div className="w-12 h-12 relative flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
+                      <circle cx="24" cy="24" r="20" stroke="white" strokeWidth="3" fill="none" 
+                        strokeDasharray="125.6" 
+                        strokeDashoffset={125.6 - (125.6 * (uploadProgress[m.message_id] ?? downloadProgress[m.message_id])) / 100} 
+                        className="transition-all duration-150 ease-out" />
+                    </svg>
+                    <span className="absolute text-white text-[10px] font-bold">{uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {m.message_type &&
+            !["text", "location", "poll"].includes(m.message_type) &&
+            !["image", "audio", "video"].includes(m.message_type.split("/")[0]) && (
+            <button
+              onClick={() => downloadFile(decryptedContent, m.file_name, m.message_id)}
+              className="group relative flex items-center gap-3 p-3 rounded-xl transition-all text-left max-w-[260px] md:max-w-sm overflow-hidden"
+              style={{
+                background: isOwn ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.05)',
+                border: isOwn ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.08)'
+              }}
+              title="Download Document"
+            >
+              {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
+                <div 
+                  className="absolute left-0 top-0 bottom-0 bg-white/10 transition-all duration-300" 
+                  style={{width: `${uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}%`}}
+                />
+              )}
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center relative z-10"
+                style={{ background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(124,58,237,0.15)' }}
+              >
+                <Paperclip size={20} className={isOwn ? 'text-white' : 'text-primary'} />
+              </div>
+              <div className="flex-1 min-w-0 relative z-10">
+                <p className="text-sm font-medium truncate mb-0.5">{m.file_name || "Document.pdf"}</p>
+                <p className="text-[10px] opacity-70 uppercase tracking-wider truncate">
+                  {uploadProgress[m.message_id] !== undefined 
+                    ? `Uploading... ${uploadProgress[m.message_id]}%` 
+                    : downloadProgress[m.message_id] !== undefined
+                      ? `Downloading... ${downloadProgress[m.message_id]}%`
+                      : m.message_type.split("/").pop()}
+                </p>
+              </div>
+              {(uploadProgress[m.message_id] === undefined && downloadProgress[m.message_id] === undefined) && (
+                <Download size={16} className="opacity-0 group-hover:opacity-100 transition-all shrink-0 ml-1 relative z-10" />
+              )}
+            </button>
+          )}
+          <div className="flex justify-end items-center mt-1 gap-1.5">
+            <span className="text-[10px]" style={{opacity: 0.55}}>
+              {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </span>
+            {isOwn && (
+              <div className="text-[10px] opacity-70">
+                {m.read_by?.length > 1 ? "Read" : "Sent"}
+              </div>
+            )}
+          </div>
+
+          {m.reactions && m.reactions.length > 0 && (
+            <div className={`flex flex-wrap gap-1 mt-1.5 -mb-0.5 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+              {Object.entries(m.reactions.reduce((acc, r) => { acc[r.emoji] = (acc[r.emoji] || 0) + 1; return acc; }, {})).map(([emoji, count]) => (
+                <button key={emoji} onClick={() => {
+                  const userReacted = m.reactions.find(r => r.emoji === emoji && r.user_id === user.user_id);
+                  if (userReacted) {
+                    socket.emit("remove_reaction", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, emoji });
+                  } else {
+                    socket.emit("add_reaction", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, emoji });
+                  }
+                }} className="text-[11px] px-1.5 py-0.5 rounded-full bg-black/10 hover:bg-black/20 dark:bg-black/20 dark:hover:bg-black/40 transition-colors flex items-center gap-1 border border-foreground/5 text-inherit">
+                  <span>{emoji}</span><span>{count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+        </div>
+
+        {/* Hover Actions */}
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 mt-1 shrink-0">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted/80">
+                <Smile size={14} />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent side="top" className="w-auto p-2 flex gap-1 rounded-full border border-border bg-popover shadow-xl z-50">
+              {["👍", "❤️", "😂", "😮", "😢", "🔥"].map(emoji => (
+                <button key={emoji} onClick={() => {
+                  socket.emit("add_reaction", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, emoji });
+                }} className="text-xl hover:scale-125 transition-transform p-1">
+                  {emoji}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted/80" onClick={() => setReplyingTo(m)}>
+            <Reply size={14} />
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  );
+  // Important: We only re-render if fundamental props change!
+}, (prevProps, nextProps) => {
+  return prevProps.m === nextProps.m &&
+         prevProps.user === nextProps.user &&
+         prevProps.uploadProgress[prevProps.m.message_id] === nextProps.uploadProgress[nextProps.m.message_id] &&
+         prevProps.downloadProgress[prevProps.m.message_id] === nextProps.downloadProgress[nextProps.m.message_id];
+});
+
 export default function ChatWindow({
   startCall,
   dateSearch,
@@ -191,211 +409,21 @@ export default function ChatWindow({
               </div>
             )
           }}
-          itemContent={(index, m) => {
-            // We need to re-implement the memoized message logic per-item for Virtuoso to render
-            const isOwn = user && m.sender_id === user.user_id;
-
-            if (m.message_type === "poll") return null;
-
-            const myPrivateKey = user ? localStorage.getItem(`e2ee_private_key_${user.email}`) : null;
-            const theirPublicKey = selectedConversation?.other_user?.public_key;
-
-            const decryptedContent = decryptMessage(m.content, myPrivateKey, theirPublicKey);
-
-            const repliedMessage = m.reply_to ? messages.find(msg => msg.message_id === m.reply_to) : null;
-            const decryptedRepliedContent = repliedMessage ? decryptMessage(repliedMessage.content, myPrivateKey, theirPublicKey) : null;
-
-            const currentDate = formatMessageDate(m.timestamp, t);
-            const prevDate = index > 0 ? formatMessageDate(messages[index - 1].timestamp, t) : null;
-            const showDateSeparator = currentDate !== prevDate;
-
-            return (
-              <div className="py-1">
-                {showDateSeparator && (
-                  <div className="flex w-full justify-center my-5 mb-6 relative z-10 pointer-events-none">
-                    <span className="bg-black/50 backdrop-blur-md border border-white/10 text-white/90 text-[11px] py-1 px-4 rounded-full shadow-sm font-medium tracking-wide">
-                      {currentDate}
-                    </span>
-                  </div>
-                )}
-                <div className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-message-in group`}>
-                  <div className={`flex flex-col max-w-[72%] ${isOwn ? 'items-end' : 'items-start'}`}>
-                    
-                    {repliedMessage && (
-                      <div className={`text-xs opacity-75 mb-1 px-3 py-1.5 rounded-lg truncate border-l-2 max-w-full cursor-pointer hover:opacity-100 transition-opacity ${isOwn ? 'border-primary/50 bg-primary/10' : 'border-muted-foreground/50 bg-muted/50'}`}>
-                        <span className="font-semibold block mb-0.5">{repliedMessage.sender_id === user?.user_id ? "You" : "Them"}:</span>
-                        {repliedMessage.message_type === 'text' ? decryptedRepliedContent : `[${repliedMessage.message_type}]`}
-                      </div>
-                    )}
-
-                    <div className={`relative flex items-center gap-2 ${isOwn ? "flex-row-reverse" : "flex-row"} w-full`}>
-                      <div className={`px-4 py-2.5 rounded-2xl relative z-10 w-fit ${isOwn ? "bubble-own text-white rounded-tr-sm" : "bubble-other text-foreground rounded-tl-sm"}`}>
-                    {m.message_type === "text" && (
-                      <p className="text-sm leading-relaxed break-words">{decryptedContent}</p>
-                    )}
-                    {m.message_type === "location" && (
-                      <a
-                        href={decryptedContent}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group flex flex-col items-center justify-center p-4 rounded-xl text-inherit no-underline transition-all"
-                        style={{
-                          background: isOwn ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.05)',
-                          border: isOwn ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.08)'
-                        }}
-                      >
-                        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-2" 
-                          style={{ background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(124,58,237,0.15)' }}
-                        >
-                          <MapPin size={24} className={isOwn ? 'text-white' : 'text-primary'} />
-                        </div>
-                        <span className="text-sm font-semibold mb-0.5">{t("view_location")}</span>
-                        <span className="text-xs opacity-70 underline underline-offset-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-[180px]">
-                          {decryptedContent}
-                        </span>
-                      </a>
-                    )}
-                    {m.message_type?.startsWith("image") && (
-                      <div className="relative group overflow-hidden rounded-xl min-h-[60px] min-w-[100px] bg-black/10">
-                        <img src={decryptedContent} alt="attachment" className="w-full max-h-60 object-cover" />
-                        <button
-                          onClick={() => downloadFile(decryptedContent, m.file_name || "image", m.message_id)}
-                          className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all z-10"
-                          title="Download Image"
-                        >
-                          <Download size={14} />
-                        </button>
-                        {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
-                          <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center backdrop-blur-sm z-20 transition-all duration-300">
-                            <div className="w-12 h-12 relative flex items-center justify-center">
-                              <svg className="w-full h-full transform -rotate-90">
-                                <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
-                                <circle cx="24" cy="24" r="20" stroke="white" strokeWidth="3" fill="none" 
-                                  strokeDasharray="125.6" 
-                                  strokeDashoffset={125.6 - (125.6 * (uploadProgress[m.message_id] ?? downloadProgress[m.message_id])) / 100} 
-                                  className="transition-all duration-150 ease-out" />
-                              </svg>
-                              <span className="absolute text-white text-[10px] font-bold">{uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
-                      <div className="relative group overflow-hidden rounded-xl min-h-[60px] min-w-[200px] bg-black/10">
-                        <video controls src={decryptedContent} className="max-w-full rounded-xl relative z-10" />
-                        {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
-                          <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center backdrop-blur-sm z-20 transition-all duration-300 rounded-xl">
-                            <div className="w-12 h-12 relative flex items-center justify-center">
-                              <svg className="w-full h-full transform -rotate-90">
-                                <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
-                                <circle cx="24" cy="24" r="20" stroke="white" strokeWidth="3" fill="none" 
-                                  strokeDasharray="125.6" 
-                                  strokeDashoffset={125.6 - (125.6 * (uploadProgress[m.message_id] ?? downloadProgress[m.message_id])) / 100} 
-                                  className="transition-all duration-150 ease-out" />
-                              </svg>
-                              <span className="absolute text-white text-[10px] font-bold">{uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {m.message_type &&
-                      !["text", "location", "poll"].includes(m.message_type) &&
-                      !["image", "audio", "video"].includes(m.message_type.split("/")[0]) && (
-                      <button
-                        onClick={() => downloadFile(decryptedContent, m.file_name, m.message_id)}
-                        className="group relative flex items-center gap-3 p-3 rounded-xl transition-all text-left max-w-[260px] md:max-w-sm overflow-hidden"
-                        style={{
-                          background: isOwn ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.05)',
-                          border: isOwn ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.08)'
-                        }}
-                        title="Download Document"
-                      >
-                        {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
-                          <div 
-                            className="absolute left-0 top-0 bottom-0 bg-white/10 transition-all duration-300" 
-                            style={{width: `${uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}%`}}
-                          />
-                        )}
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center relative z-10"
-                          style={{ background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(124,58,237,0.15)' }}
-                        >
-                          <Paperclip size={20} className={isOwn ? 'text-white' : 'text-primary'} />
-                        </div>
-                        <div className="flex-1 min-w-0 relative z-10">
-                          <p className="text-sm font-medium truncate mb-0.5">{m.file_name || "Document.pdf"}</p>
-                          <p className="text-[10px] opacity-70 uppercase tracking-wider truncate">
-                            {uploadProgress[m.message_id] !== undefined 
-                              ? `Uploading... ${uploadProgress[m.message_id]}%` 
-                              : downloadProgress[m.message_id] !== undefined
-                                ? `Downloading... ${downloadProgress[m.message_id]}%`
-                                : m.message_type.split("/").pop()}
-                          </p>
-                        </div>
-                        {(uploadProgress[m.message_id] === undefined && downloadProgress[m.message_id] === undefined) && (
-                          <Download size={16} className="opacity-0 group-hover:opacity-100 transition-all shrink-0 ml-1 relative z-10" />
-                        )}
-                      </button>
-                    )}
-                    <div className="flex justify-end items-center mt-1 gap-1.5">
-                      <span className="text-[10px]" style={{opacity: 0.55}}>
-                        {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                      {isOwn && (
-                        <div className="text-[10px] opacity-70">
-                          {m.read_by?.length > 1 ? "Read" : "Sent"}
-                        </div>
-                      )}
-                    </div>
-
-                    {m.reactions && m.reactions.length > 0 && (
-                      <div className={`flex flex-wrap gap-1 mt-1.5 -mb-0.5 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                        {Object.entries(m.reactions.reduce((acc, r) => { acc[r.emoji] = (acc[r.emoji] || 0) + 1; return acc; }, {})).map(([emoji, count]) => (
-                          <button key={emoji} onClick={() => {
-                            const userReacted = m.reactions.find(r => r.emoji === emoji && r.user_id === user.user_id);
-                            if (userReacted) {
-                              socket.emit("remove_reaction", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, emoji });
-                            } else {
-                              socket.emit("add_reaction", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, emoji });
-                            }
-                          }} className="text-[11px] px-1.5 py-0.5 rounded-full bg-black/10 hover:bg-black/20 dark:bg-black/20 dark:hover:bg-black/40 transition-colors flex items-center gap-1 border border-foreground/5 text-inherit">
-                            <span>{emoji}</span><span>{count}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                  </div>
-
-                  {/* Hover Actions */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 mt-1 shrink-0">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted/80">
-                          <Smile size={14} />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent side="top" className="w-auto p-2 flex gap-1 rounded-full border border-border bg-popover shadow-xl z-50">
-                        {["👍", "❤️", "😂", "😮", "😢", "🔥"].map(emoji => (
-                          <button key={emoji} onClick={() => {
-                            socket.emit("add_reaction", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, emoji });
-                          }} className="text-xl hover:scale-125 transition-transform p-1">
-                            {emoji}
-                          </button>
-                        ))}
-                      </PopoverContent>
-                    </Popover>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted/80" onClick={() => setReplyingTo(m)}>
-                      <Reply size={14} />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          );
-          }}
+          itemContent={(index, m) => (
+            <MemoizedMessageRow 
+              m={m} 
+              index={index} 
+              messages={messages} 
+              user={user} 
+              selectedConversation={selectedConversation} 
+              t={t} 
+              downloadFile={downloadFile} 
+              uploadProgress={uploadProgress} 
+              downloadProgress={downloadProgress} 
+              socket={socket} 
+              setReplyingTo={setReplyingTo} 
+            />
+          )}
         />
 
         {/* Typing indicator */}

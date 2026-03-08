@@ -75,6 +75,7 @@ body::after {
   pointer-events: none;
   z-index: 0;
   animation: orbFloat 9s ease-in-out infinite;
+  will-change: transform;
 }
 
 /* ─── Glassmorphism panels ──── */
@@ -82,12 +83,14 @@ body::after {
   backdrop-filter: blur(24px) saturate(180%);
   background: rgba(10,10,22,0.78);
   border: 1px solid rgba(255,255,255,0.06);
+  will-change: backdrop-filter;
 }
 .glass-modal {
   backdrop-filter: blur(28px) saturate(200%);
   background: rgba(10,10,22,0.90);
   border: 1px solid rgba(255,255,255,0.09);
   box-shadow: 0 32px 64px -12px rgba(0,0,0,0.72), 0 0 0 1px rgba(124,58,237,0.08);
+  will-change: backdrop-filter, box-shadow;
 }
 
 /* ─── Auth input (overrides shadcn + autofill) ─ */
@@ -109,6 +112,7 @@ body::after {
   background: linear-gradient(135deg, #7c3aed, #4f46e5, #a78bfa, #7c3aed);
   background-size: 300% 300%;
   animation: gradientShift 3s ease infinite;
+  will-change: background-position;
 }
 
 /* ─── Global transition reset for smooth feels ─ */
