@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff, MessageCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import VariableProximity from "@/components/ui/VariableProximity";
 
 function LoginForm({ containerRef }) {
   const navigate = useNavigate();
@@ -173,14 +172,7 @@ export default function Login() {
           </div>
 
           <div className="text-xl font-semibold mb-1 text-center text-white animate-fade-in stagger-1 cursor-default">
-            <VariableProximity
-              label="Welcome back"
-              containerRef={containerRef}
-              radius={100}
-              falloff="linear"
-              fromFontVariationSettings="'wght' 400, 'opsz' 9"
-              toFontVariationSettings="'wght' 1000, 'opsz' 40"
-            />
+            Welcome back
           </div>
           <p className="text-sm text-center mb-8 animate-fade-in stagger-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
             Sign in to continue chatting

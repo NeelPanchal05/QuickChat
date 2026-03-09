@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, MessageCircle, Sparkles, User, AtSign, Mail, Hash, Lock } from "lucide-react";
 import { toast } from "sonner";
-import VariableProximity from "@/components/ui/VariableProximity";
 import { useRef } from "react";
 
 const fields = [
@@ -172,14 +171,7 @@ export default function Register() {
           </div>
 
           <div className="text-lg font-semibold mb-1 text-center text-white animate-fade-in cursor-default">
-            <VariableProximity
-              label="Create an account"
-              containerRef={containerRef}
-              radius={100}
-              falloff="linear"
-              fromFontVariationSettings="'wght' 400, 'opsz' 9"
-              toFontVariationSettings="'wght' 1000, 'opsz' 40"
-            />
+            Create an account
           </div>
           <p className="text-xs text-center mb-6 animate-fade-in stagger-1" style={{ color: 'rgba(255,255,255,0.38)' }}>Join thousands chatting securely</p>
 
