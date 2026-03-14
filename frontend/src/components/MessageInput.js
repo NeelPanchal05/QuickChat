@@ -106,16 +106,27 @@ export default function MessageInput({ isCurrentChatBlocked }) {
     const myPrivateKey = localStorage.getItem(`e2ee_private_key_${user.email}`);
     const theirPublicKey = selectedConversation.other_user?.public_key;
 
-    if (messageInput.trim()) {
-      const tempId = addOptimisticMessage(messageInput, "text", null, replyingTo?.message_id);
-      const encryptedContent = encryptMessage(messageInput, myPrivateKey, theirPublicKey);
+    // Grab copies to clear UI immediately without waiting for API uploads
+    const textToSend = messageInput;
+    const filesToSend = [...attachedFiles];
+    const replyToId = replyingTo?.message_id;
+
+    setMessageInput("");
+    setAttachedFiles([]);
+    setShowMediaUploader(false);
+    setShowEmojiPicker(false);
+    setReplyingTo(null);
+
+    if (textToSend.trim()) {
+      const tempId = addOptimisticMessage(textToSend, "text", null, replyToId);
+      const encryptedContent = encryptMessage(textToSend, myPrivateKey, theirPublicKey);
       
       const payload = {
         conversation_id: selectedConversation.conversation_id,
         content: encryptedContent,
         message_type: "text",
         temp_id: tempId,
-        reply_to: replyingTo?.message_id
+        reply_to: replyToId
       };
 
       if (socket?.connected) {
@@ -130,8 +141,8 @@ export default function MessageInput({ isCurrentChatBlocked }) {
       }
     }
 
-    for (const file of attachedFiles) {
-      const tempId = addOptimisticMessage(file.data, file.type, file.name, replyingTo?.message_id);
+    for (const file of filesToSend) {
+      const tempId = addOptimisticMessage(file.data, file.type, file.name, replyToId);
       
       // For large files E2EE in-browser base64 can crash the tab, so we might just send the file
       // normally for this demo unless we want to chunk it. Let's encrypt the data URI!
@@ -141,7 +152,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
         setUploadProgress(tempId, 0);
         await axios.post(
           `${API}/conversations/${selectedConversation.conversation_id}/messages`,
-          { content: encryptedFileContent, message_type: file.type, file_name: file.name, temp_id: tempId, reply_to: replyingTo?.message_id },
+          { content: encryptedFileContent, message_type: file.type, file_name: file.name, temp_id: tempId, reply_to: replyToId },
           { 
             headers: { Authorization: `Bearer ${token}` },
             onUploadProgress: (progressEvent) => {
@@ -157,12 +168,6 @@ export default function MessageInput({ isCurrentChatBlocked }) {
         setTimeout(() => clearUploadProgress(tempId), 500);
       }
     }
-
-    setMessageInput("");
-    setAttachedFiles([]);
-    setShowMediaUploader(false);
-    setShowEmojiPicker(false);
-    setReplyingTo(null);
   };
 
   const sendLocation = () => {

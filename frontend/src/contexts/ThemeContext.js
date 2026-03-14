@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { useAuth } from "./AuthContext";
+import api from "../utils/api";
 
 const ThemeContext = createContext();
 
@@ -38,6 +40,7 @@ export const THEME_PRESETS = [
 ];
 
 export const ThemeProvider = ({ children }) => {
+  const { user, updateUser } = useAuth();
   const [theme, setTheme] = useState(
     localStorage.getItem("app_theme") || "dark"
   );
@@ -47,6 +50,18 @@ export const ThemeProvider = ({ children }) => {
     const saved = localStorage.getItem("chat_wallpaper");
     return saved ? JSON.parse(saved) : {};
   });
+
+  // Sync with backend user profile on login/load
+  useEffect(() => {
+    if (user && user.chat_wallpaper) {
+      setCurrentThemeData(user.chat_wallpaper);
+      localStorage.setItem("chat_wallpaper", JSON.stringify(user.chat_wallpaper));
+    } else if (!user) {
+      // Clear on logout
+      setCurrentThemeData({});
+      localStorage.removeItem("chat_wallpaper");
+    }
+  }, [user]);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -59,9 +74,21 @@ export const ThemeProvider = ({ children }) => {
     setTheme(newTheme);
   };
 
-  const setChatBackground = (style) => {
-    setCurrentThemeData({ bgStyle: style });
-    localStorage.setItem("chat_wallpaper", JSON.stringify({ bgStyle: style }));
+  const setChatBackground = async (style) => {
+    const newData = { bgStyle: style };
+    setCurrentThemeData(newData);
+    localStorage.setItem("chat_wallpaper", JSON.stringify(newData));
+
+    if (user) {
+      try {
+        const res = await api.put("/users/profile", { chat_wallpaper: newData });
+        if (res.data) {
+          updateUser(res.data);
+        }
+      } catch (err) {
+        console.error("Failed to sync chat wallpaper to backend", err);
+      }
+    }
   };
 
   return (

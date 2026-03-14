@@ -23,7 +23,18 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info('Starting API server...')
+    logger.info('Starting API server and initializing DB indexes...')
+    
+    # Create indexes for optimal querying
+    try:
+        await db.messages.create_index([("conversation_id", 1), ("timestamp", -1)])
+        await db.conversations.create_index("participants")
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("unique_id", unique=True)
+        logger.info('MongoDB indexes verified/created successfully.')
+    except Exception as e:
+        logger.error(f"Failed to create MongoDB indexes: {e}")
+
     yield
     client.close()
     logger.info('MongoDB connection closed')
@@ -39,8 +50,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+):3000$",
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

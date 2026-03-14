@@ -131,8 +131,16 @@ export default function DarkVeil({
 
     const resize = () => {
       const w = parent.clientWidth, h = parent.clientHeight;
-      renderer.setSize(w * resolutionScale, h * resolutionScale);
-      program.uniforms.uResolution.value.set(w, h);
+      // On desktop, even 0.5x resolution looks fine and saves massive GPU load
+      const finalScale = mobile ? resolutionScale : Math.min(resolutionScale, 0.5);
+      renderer.setSize(w * finalScale, h * finalScale);
+      
+      // uResolution still needs the FULL size to calculate UVs properly
+      program.uniforms.uResolution.value.set(w * finalScale, h * finalScale);
+      Object.assign(canvas.style, {
+        width: `${w}px`,
+        height: `${h}px`
+      });
     };
 
     window.addEventListener('resize', resize);
@@ -140,19 +148,31 @@ export default function DarkVeil({
 
     const start = performance.now();
     let frame = 0;
+    
+    // Throttle to 30fps to save GPU resources
+    const fps = 30;
+    const interval = 1000 / fps;
+    let then = performance.now();
 
-    const loop = () => {
+    const loop = (now) => {
       frame = requestAnimationFrame(loop);
-      program.uniforms.uTime.value = ((performance.now() - start) / 1000) * speed;
-      program.uniforms.uHueShift.value = hueShift;
-      program.uniforms.uNoise.value = noiseIntensity;
-      program.uniforms.uScan.value = scanlineIntensity;
-      program.uniforms.uScanFreq.value = scanlineFrequency;
-      program.uniforms.uWarp.value = warpAmount;
-      renderer.render({ scene: mesh });
+      
+      const elapsed = now - then;
+      // Only render if enough time has passed (throttle to 30fps)
+      if (elapsed > interval) {
+        then = now - (elapsed % interval);
+        
+        program.uniforms.uTime.value = ((now - start) / 1000) * speed;
+        program.uniforms.uHueShift.value = hueShift;
+        program.uniforms.uNoise.value = noiseIntensity;
+        program.uniforms.uScan.value = scanlineIntensity;
+        program.uniforms.uScanFreq.value = scanlineFrequency;
+        program.uniforms.uWarp.value = warpAmount;
+        renderer.render({ scene: mesh });
+      }
     };
 
-    loop();
+    frame = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(frame);

@@ -22,6 +22,7 @@ class UserUpdate(BaseModel):
     profile_photo: Optional[str] = None
     bio: Optional[str] = None
     public_key: Optional[str] = None
+    chat_wallpaper: Optional[dict] = None
 
 class ChangePassword(BaseModel):
     old_password: str

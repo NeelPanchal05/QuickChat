@@ -3,6 +3,7 @@ from database import db
 from models import UserUpdate, InviteFriend
 from dependencies import get_current_user
 from utils import send_email_func
+from cloudinary_utils import upload_to_cdn
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
@@ -21,6 +22,26 @@ async def search_users(query: str, current_user: dict = Depends(get_current_user
 @router.put('/profile')
 async def update_profile(data: UserUpdate, current_user: dict = Depends(get_current_user)):
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    
+    # Intercept chat_wallpaper if it contains a raw base64 image and upload to CDN
+    if 'chat_wallpaper' in update_data and update_data['chat_wallpaper']:
+        bg_style = update_data['chat_wallpaper'].get('bgStyle', {})
+        bg_image = bg_style.get('backgroundImage', '')
+        
+        if bg_image.startswith('url(data:image/'):
+            # Extract the raw data URI from 'url(data:...)'
+            raw_data_uri = bg_image[4:-1]
+            try:
+                cdn_url = await upload_to_cdn(
+                    raw_data_uri,
+                    file_name=f"wallpaper_{current_user['user_id']}.jpg",
+                    folder="quickchat_wallpapers"
+                )
+                if cdn_url:
+                    update_data['chat_wallpaper']['bgStyle']['backgroundImage'] = f"url({cdn_url})"
+            except Exception as e:
+                print(f"Failed to upload wallpaper to CDN: {e}")
+
     if update_data:
         await db.users.update_one({'user_id': current_user['user_id']}, {'$set': update_data})
     return await db.users.find_one({'user_id': current_user['user_id']}, {'_id': 0, 'password_hash': 0})

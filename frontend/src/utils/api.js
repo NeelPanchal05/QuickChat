@@ -1,17 +1,14 @@
 import axios from 'axios';
 
-let BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+let BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 
-if (
-  BACKEND_URL.includes("localhost") &&
-  window.location.hostname !== "localhost" &&
-  window.location.hostname !== "127.0.0.1"
-) {
-  BACKEND_URL = BACKEND_URL.replace("localhost", window.location.hostname);
+// Ensure we are using the correct protocol if we are running the frontend on HTTPS
+if (BACKEND_URL && window.location.protocol === 'https:' && BACKEND_URL.startsWith('http://')) {
+  BACKEND_URL = BACKEND_URL.replace('http://', 'https://');
 }
 
 const api = axios.create({
-  baseURL: `${BACKEND_URL}/api`,
+  baseURL: BACKEND_URL ? `${BACKEND_URL}/api` : '/api',
   withCredentials: true, // Important for sending/receiving HttpOnly cookies
 });
 

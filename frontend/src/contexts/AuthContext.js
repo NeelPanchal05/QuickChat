@@ -11,16 +11,13 @@ import api from "../utils/api";
 
 const AuthContext = createContext(null);
 
-let BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+let BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 
-if (
-  BACKEND_URL.includes("localhost") &&
-  window.location.hostname !== "localhost" &&
-  window.location.hostname !== "127.0.0.1"
-) {
-  BACKEND_URL = BACKEND_URL.replace("localhost", window.location.hostname);
+// Ensure we are using the correct protocol if we are running the frontend on HTTPS
+if (BACKEND_URL && window.location.protocol === 'https:' && BACKEND_URL.startsWith('http://')) {
+  BACKEND_URL = BACKEND_URL.replace('http://', 'https://');
 }
-const API = `${BACKEND_URL}/api`;
+const API = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
 
 // --- User cache helpers -------------------------------------------------
 // Caching the user object in localStorage means the UI renders instantly
@@ -84,9 +81,9 @@ export const AuthProvider = ({ children }) => {
   // On mobile networks this can add several seconds of latency.
   useEffect(() => {
     if (token) {
-      const newSocket = io(BACKEND_URL, {
+      const newSocket = io(BACKEND_URL || "/", {
         auth: { token },
-        transports: ["websocket"],   // ← websocket only, no polling
+        transports: ["polling"], 
         withCredentials: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
