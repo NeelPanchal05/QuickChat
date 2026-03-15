@@ -24,6 +24,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
   const [attachedFiles, setAttachedFiles] = useState([]);
   const [showMediaUploader, setShowMediaUploader] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isVanishMode, setIsVanishMode] = useState(false);
 
   const { isRecording, startRecording, stopRecording } = useAudioRecorder(
     API,
@@ -118,7 +119,8 @@ export default function MessageInput({ isCurrentChatBlocked }) {
     setReplyingTo(null);
 
     if (textToSend.trim()) {
-      const tempId = addOptimisticMessage(textToSend, "text", null, replyToId);
+      const expiresIn = isVanishMode ? 60 : 0;
+      const tempId = addOptimisticMessage(textToSend, "text", null, replyToId, expiresIn, user, selectedConversation);
       const encryptedContent = encryptMessage(textToSend, myPrivateKey, theirPublicKey);
       
       const payload = {
@@ -126,7 +128,8 @@ export default function MessageInput({ isCurrentChatBlocked }) {
         content: encryptedContent,
         message_type: "text",
         temp_id: tempId,
-        reply_to: replyToId
+        reply_to: replyToId,
+        expires_in: expiresIn
       };
 
       if (socket?.connected) {
@@ -142,7 +145,8 @@ export default function MessageInput({ isCurrentChatBlocked }) {
     }
 
     for (const file of filesToSend) {
-      const tempId = addOptimisticMessage(file.data, file.type, file.name, replyToId);
+      const expiresIn = isVanishMode ? 60 : 0;
+      const tempId = addOptimisticMessage(file.data, file.type, file.name, replyToId, expiresIn, user, selectedConversation);
       
       // For large files E2EE in-browser base64 can crash the tab, so we might just send the file
       // normally for this demo unless we want to chunk it. Let's encrypt the data URI!
@@ -152,7 +156,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
         setUploadProgress(tempId, 0);
         await axios.post(
           `${API}/conversations/${selectedConversation.conversation_id}/messages`,
-          { content: encryptedFileContent, message_type: file.type, file_name: file.name, temp_id: tempId, reply_to: replyToId },
+          { content: encryptedFileContent, message_type: file.type, file_name: file.name, temp_id: tempId, reply_to: replyToId, expires_in: expiresIn },
           { 
             headers: { Authorization: `Bearer ${token}` },
             onUploadProgress: (progressEvent) => {
@@ -178,8 +182,9 @@ export default function MessageInput({ isCurrentChatBlocked }) {
     toast.info("Fetching location...");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        const expiresIn = isVanishMode ? 60 : 0;
         const locationUrl = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-        const tempId = addOptimisticMessage(locationUrl, "location");
+        const tempId = addOptimisticMessage(locationUrl, "location", null, null, expiresIn, user, selectedConversation);
         
         const myPrivateKey = localStorage.getItem(`e2ee_private_key_${user.email}`);
         const theirPublicKey = selectedConversation.other_user?.public_key;
@@ -190,6 +195,7 @@ export default function MessageInput({ isCurrentChatBlocked }) {
           content: encryptedLocation,
           message_type: "location",
           temp_id: tempId,
+          expires_in: expiresIn
         };
         
         if (socket?.connected) {
@@ -290,8 +296,14 @@ export default function MessageInput({ isCurrentChatBlocked }) {
         </div>
       )}
       
+      
       <div className="flex items-center gap-2">
         <div className="flex gap-0.5">
+          <Button variant="ghost" size="icon" onClick={() => setIsVanishMode(!isVanishMode)}
+            className={`icon-btn-hover h-9 w-9 ${isVanishMode ? 'text-red-500 bg-red-500/10' : 'text-muted-foreground'}`}
+            title="Vanish Mode (60s)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => setShowMediaUploader(!showMediaUploader)}
             className="icon-btn-hover h-9 w-9 text-muted-foreground">
             <Paperclip size={18} />

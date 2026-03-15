@@ -148,6 +148,44 @@ export const useChatSocket = ({
       );
     };
 
+    const handleMessageReaction = (data) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.message_id === data.message_id) {
+            const currentReactions = m.reactions || [];
+            if (data.action === 'added') {
+              const filtered = currentReactions.filter(r => !(r.user_id === data.user_id && r.emoji === data.emoji));
+              return { ...m, reactions: [...filtered, { user_id: data.user_id, emoji: data.emoji }] };
+            } else {
+              const filtered = currentReactions.filter(r => !(r.user_id === data.user_id && r.emoji === data.emoji));
+              return { ...m, reactions: filtered };
+            }
+          }
+          return m;
+        })
+      );
+    };
+
+    const handleMessageEdited = (data) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.message_id === data.message_id
+            ? { ...m, content: data.new_content, is_edited: true }
+            : m
+        )
+      );
+    };
+
+    const handleMessageDeleted = (data) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.message_id === data.message_id
+            ? { ...m, content: "", is_deleted: true, file_name: null, message_type: "text" }
+            : m
+        )
+      );
+    };
+
     socket.on("new_message", handleNewMessage);
     socket.on("user_typing", handleUserTyping);
     socket.on("user_online", handleOnline);
@@ -158,6 +196,9 @@ export const useChatSocket = ({
     socket.on("messages_read_batch", handleMessagesReadBatch);
     socket.on("reaction_added", handleReactionAdded);
     socket.on("reaction_removed", handleReactionRemoved);
+    socket.on("message_reaction", handleMessageReaction);
+    socket.on("message_edited", handleMessageEdited);
+    socket.on("message_deleted", handleMessageDeleted);
 
     return () => {
       socket.off("new_message", handleNewMessage);
@@ -170,6 +211,9 @@ export const useChatSocket = ({
       socket.off("messages_read_batch", handleMessagesReadBatch);
       socket.off("reaction_added", handleReactionAdded);
       socket.off("reaction_removed", handleReactionRemoved);
+      socket.off("message_reaction", handleMessageReaction);
+      socket.off("message_edited", handleMessageEdited);
+      socket.off("message_deleted", handleMessageDeleted);
     };
   }, [socket, fetchConversations, playNotificationSound, user, setMessages, setTyping, setCallData, setShowCall, setOnlineUsers]);
 

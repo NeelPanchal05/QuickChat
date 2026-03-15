@@ -162,6 +162,7 @@ async def save_attachment_message(
     file_name: str = Body(default=None),
     temp_id: Optional[str] = Body(default=None),
     reply_to: Optional[str] = Body(default=None),
+    expires_in: Optional[int] = Body(default=0),
     current_user: dict = Depends(get_current_user)
 ):
     is_spam, reason = spam_protection.check_spam(current_user['user_id'])
@@ -197,7 +198,10 @@ async def save_attachment_message(
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'read_by': [current_user['user_id']],
         'reply_to': reply_to,
-        'reactions': []
+        'reactions': [],
+        'is_edited': False,
+        'is_deleted': False,
+        'expires_in': expires_in
     }
     await db.messages.insert_one(doc)
     await db.conversations.update_one({'conversation_id': conversation_id}, {'$set': {'updated_at': doc['timestamp']}})
@@ -233,7 +237,7 @@ async def get_archived(current_user: dict = Depends(get_current_user)):
     convs = await db.conversations.find({
         'participants': current_user['user_id'],
         'archived_by': current_user['user_id']
-    }, {'_id': 0}).to_list(None)
+    }, {'_id': 0}).to_list(1000)
     return convs
 
 @router.delete('/conversations/{conversation_id}')

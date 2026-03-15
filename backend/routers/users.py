@@ -72,4 +72,4 @@ async def unblock_user(user_id: str, current_user: dict = Depends(get_current_us
 async def get_blocked_users(current_user: dict = Depends(get_current_user)):
     user = await db.users.find_one({'user_id': current_user['user_id']})
     blocked_ids = user.get('blocked_users', [])
-    return await db.users.find({'user_id': {'$in': blocked_ids}}, {'_id': 0, 'password_hash': 0}).to_list(None)
+    return await db.users.find({'user_id': {'$in': blocked_ids}}, {'_id': 0, 'password_hash': 0}).to_list(1000)

@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
     # Create indexes for optimal querying
     try:
         await db.messages.create_index([("conversation_id", 1), ("timestamp", -1)])
+        await db.messages.create_index("expires_at", expireAfterSeconds=0)
         await db.conversations.create_index("participants")
         await db.users.create_index("email", unique=True)
         await db.users.create_index("unique_id", unique=True)

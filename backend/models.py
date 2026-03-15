@@ -41,6 +41,16 @@ class SendMessageEvent(BaseModel):
     file_name: Optional[str] = None
     reply_to: Optional[str] = None
     temp_id: Optional[str] = None
+    expires_in: Optional[int] = 0
+
+class EditMessageEvent(BaseModel):
+    message_id: str
+    conversation_id: str
+    new_content: str
+
+class DeleteMessageEvent(BaseModel):
+    message_id: str
+    conversation_id: str
 
 class TypingEvent(BaseModel):
     conversation_id: str

@@ -61,7 +61,7 @@ export const useChatStore = create(
   }),
 
   // Optimistic updates need access to current state
-  addOptimisticMessage: (content, type, fileName = null, replyToId = null, user, selectedConv) => {
+  addOptimisticMessage: (content, type, fileName = null, replyToId = null, expiresIn = 0, user, selectedConv) => {
     if (!user || !selectedConv) return null;
     
     const tempId = `temp_${Date.now()}_${Math.random()}`;
@@ -76,6 +76,9 @@ export const useChatStore = create(
       read_by: [user.user_id],
       reply_to: replyToId,
       reactions: [],
+      is_edited: false,
+      is_deleted: false,
+      expires_in: expiresIn,
     };
 
     set((state) => {

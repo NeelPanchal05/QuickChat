@@ -11,7 +11,7 @@ async def send_push_notification(user_id: str, payload: dict):
     if not VAPID_PRIVATE_KEY:
         return
         
-    subscriptions = await db.push_subscriptions.find({"user_id": user_id}).to_list(None)
+    subscriptions = await db.push_subscriptions.find({"user_id": user_id}).to_list(1000)
     for sub in subscriptions:
         try:
             await asyncio.to_thread(

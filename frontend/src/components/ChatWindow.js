@@ -63,6 +63,13 @@ const MemoizedMessageRow = React.memo(({
   const prevDate = index > 0 ? formatMessageDate(messages[index - 1].timestamp, t) : null;
   const showDateSeparator = currentDate !== prevDate;
 
+  // Vanish Mode countdown calculated dynamically (React component rerenders will catch this, or we could use an interval, but for now a static compute on render works mostly if interacting)
+  const isVanishing = m.expires_in > 0;
+  let remainingSeconds = isVanishing ? m.expires_in : null;
+  if (isVanishing && m.expires_at) {
+      remainingSeconds = Math.max(0, Math.floor((new Date(m.expires_at).getTime() - Date.now()) / 1000));
+  }
+
   return (
     <div className="py-1">
       {showDateSeparator && (
@@ -84,6 +91,12 @@ const MemoizedMessageRow = React.memo(({
 
           <div className={`relative flex items-center gap-2 ${isOwn ? "flex-row-reverse" : "flex-row"} w-full`}>
             <div className={`px-4 py-2.5 rounded-2xl relative z-10 w-fit ${isOwn ? "bubble-own text-white rounded-tr-sm" : "bubble-other text-foreground rounded-tl-sm"}`}>
+          {m.is_deleted ? (
+             <div className="relative group overflow-hidden rounded-xl min-h-[40px] px-4 py-2 bg-black/5 dark:bg-white/5 border border-dashed border-foreground/20 text-muted-foreground italic text-sm">
+                🚫 {t("message_deleted") || "This message was deleted"}
+             </div>
+          ) : (
+            <>
           {m.message_type === "text" && (
             <p className="text-sm leading-relaxed break-words">{decryptedContent}</p>
           )}
@@ -110,7 +123,7 @@ const MemoizedMessageRow = React.memo(({
             </a>
           )}
           {m.message_type?.startsWith("image") && (
-            <div className="relative group overflow-hidden rounded-xl min-h-[60px] min-w-[100px] bg-black/10">
+            <div className={`relative group overflow-hidden rounded-xl min-h-[60px] min-w-[100px] bg-black/10 ${isVanishing && !isOwn ? 'blur-md hover:blur-none transition-all duration-300' : ''}`}>
               <img src={decryptedContent} alt="attachment" className="w-full max-h-60 object-cover" />
               <button
                 onClick={() => downloadFile(decryptedContent, m.file_name || "image", m.message_id)}
@@ -192,7 +205,16 @@ const MemoizedMessageRow = React.memo(({
               )}
             </button>
           )}
-          <div className="flex justify-end items-center mt-1 gap-1.5">
+          <div className="flex justify-end items-center mt-1 gap-1.5 flex-wrap">
+            {isVanishing && (
+              <span className="text-[10px] flex items-center gap-0.5" style={{opacity: 0.9, color: m.expires_at ? '#ef4444' : 'inherit'}}>
+                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+                 {m.expires_at ? `${remainingSeconds}s` : `${m.expires_in}s`}
+              </span>
+            )}
+            {m.is_edited && (
+              <span className="text-[9px] italic opacity-60 mr-1">(edited)</span>
+            )}
             <span className="text-[10px]" style={{opacity: 0.55}}>
               {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
@@ -202,6 +224,8 @@ const MemoizedMessageRow = React.memo(({
               </div>
             )}
           </div>
+          </>
+          )}
 
           {m.reactions && m.reactions.length > 0 && (
             <div className={`flex flex-wrap gap-1 mt-1.5 -mb-0.5 ${isOwn ? 'justify-end' : 'justify-start'}`}>
@@ -223,6 +247,7 @@ const MemoizedMessageRow = React.memo(({
         </div>
 
         {/* Hover Actions */}
+        {!m.is_deleted && (
         <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 mt-1 shrink-0">
           <Popover>
             <PopoverTrigger asChild>
@@ -233,7 +258,7 @@ const MemoizedMessageRow = React.memo(({
             <PopoverContent side="top" className="w-auto p-2 flex gap-1 rounded-full border border-border bg-popover shadow-xl z-50">
               {["👍", "❤️", "😂", "😮", "😢", "🔥"].map(emoji => (
                 <button key={emoji} onClick={() => {
-                  socket.emit("add_reaction", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, emoji });
+                  socket.emit("react_to_message", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, emoji });
                 }} className="text-xl hover:scale-125 transition-transform p-1">
                   {emoji}
                 </button>
@@ -241,9 +266,37 @@ const MemoizedMessageRow = React.memo(({
             </PopoverContent>
           </Popover>
           <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted/80" onClick={() => setReplyingTo(m)}>
-            <Reply size={14} />
+             <Reply size={14} />
           </Button>
+
+          {isOwn && ((Date.now() - new Date(m.timestamp).getTime()) / 1000) < 900 && m.message_type === "text" && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted/80">
+                   <MoreVertical size={14} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-32 z-50 border border-border bg-popover text-foreground rounded-lg shadow-xl">
+                 <DropdownMenuItem onClick={() => {
+                    const newText = prompt("Edit your message:", decryptedContent);
+                    if (newText !== null && newText.trim() !== "" && newText !== decryptedContent) {
+                        socket.emit("edit_message", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, new_content: newText.trim() });
+                    }
+                 }} className="text-sm cursor-pointer">
+                    Edit
+                 </DropdownMenuItem>
+                 <DropdownMenuItem onClick={() => {
+                    if (window.confirm("Are you sure you want to delete this message?")) {
+                        socket.emit("delete_message", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id });
+                    }
+                 }} className="text-sm cursor-pointer text-destructive focus:text-destructive">
+                    Delete
+                 </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
+        )}
       </div>
     </div>
   </div>

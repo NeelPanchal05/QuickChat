@@ -1,5 +1,5 @@
 import jwt
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from database import db
 from utils import SECRET_KEY, ALGORITHM
 from encryption import encrypt_message
@@ -10,7 +10,7 @@ from models import (
     SendMessageEvent, TypingEvent, MessageReadEvent, 
     MessagesReadBatchEvent, ReactionEvent, CallUserEvent, 
     AcceptCallEvent, RejectCallEvent, EndCallEvent,
-    IceCandidateEvent
+    IceCandidateEvent, EditMessageEvent, DeleteMessageEvent
 )
 from pydantic import ValidationError
 @sio.on('connect')
@@ -97,7 +97,10 @@ async def handle_message(sid, data):
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'read_by': [user_id],
         'reply_to': validated_data.reply_to,
-        'reactions': []
+        'reactions': [],
+        'expires_in': validated_data.expires_in or 0,
+        'is_edited': False,
+        'is_deleted': False
     }
     
     await db.messages.insert_one(doc)
@@ -140,10 +143,19 @@ async def handle_read(sid, data):
     if sid in user_sockets:
         try:
             val = MessageReadEvent(**data)
-            await db.messages.update_one(
-                {'message_id': val.message_id}, 
-                {'$addToSet': {'read_by': user_sockets[sid]}}
-            )
+            
+            # Fetch message to check for Vanish Mode
+            msg = await db.messages.find_one({'message_id': val.message_id})
+            if msg:
+                updates = {'$addToSet': {'read_by': user_sockets[sid]}}
+                
+                # If message has expires_in > 0 and no expires_at yet, start the timer
+                if msg.get('expires_in', 0) > 0 and not msg.get('expires_at'):
+                    expires_at = datetime.now(timezone.utc) + timedelta(seconds=msg['expires_in'])
+                    updates['$set'] = {'expires_at': expires_at}
+                    
+                await db.messages.update_one({'message_id': val.message_id}, updates)
+                
             await sio.emit('message_read', {
                 'message_id': val.message_id, 
                 'user_id': user_sockets[sid]
@@ -166,40 +178,110 @@ async def handle_read_batch(sid, data):
                 'user_id': user_sockets[sid]
             }, room=conversation_id)
 
-@sio.on('add_reaction')
-async def add_reaction(sid, data):
+@sio.on('react_to_message')
+async def react_to_message(sid, data):
     if sid in user_sockets:
         try:
             val = ReactionEvent(**data)
             user_id = user_sockets[sid]
             reaction = {'user_id': user_id, 'emoji': val.emoji}
-            await db.messages.update_one(
-                {'message_id': val.message_id},
-                {'$addToSet': {'reactions': reaction}}
-            )
-            await sio.emit('reaction_added', {
+            
+            # Check if this exact reaction already exists
+            msg = await db.messages.find_one({'message_id': val.message_id})
+            if not msg: return
+            
+            existing_reaction = next((r for r in msg.get('reactions', []) if r['user_id'] == user_id and r['emoji'] == val.emoji), None)
+            
+            if existing_reaction:
+                # Toggle OFF: Remove reaction
+                await db.messages.update_one(
+                    {'message_id': val.message_id},
+                    {'$pull': {'reactions': reaction}}
+                )
+                action = 'removed'
+            else:
+                # Toggle ON: Add reaction
+                await db.messages.update_one(
+                    {'message_id': val.message_id},
+                    {'$addToSet': {'reactions': reaction}}
+                )
+                action = 'added'
+                
+            await sio.emit('message_reaction', {
                 'message_id': val.message_id,
                 'user_id': user_id,
-                'emoji': val.emoji
+                'emoji': val.emoji,
+                'action': action
             }, room=val.conversation_id)
         except ValidationError:
             pass
 
-@sio.on('remove_reaction')
-async def remove_reaction(sid, data):
+@sio.on('edit_message')
+async def edit_message(sid, data):
     if sid in user_sockets:
         try:
-            val = ReactionEvent(**data)
+            val = EditMessageEvent(**data)
             user_id = user_sockets[sid]
-            reaction = {'user_id': user_id, 'emoji': val.emoji}
+            
+            msg = await db.messages.find_one({'message_id': val.message_id})
+            if not msg or msg['sender_id'] != user_id:
+                await sio.emit('error', {'message': 'Cannot edit this message'}, to=sid)
+                return
+                
+            # 15 minute edit window validation
+            msg_time = datetime.fromisoformat(msg['timestamp'])
+            if (datetime.now(timezone.utc) - msg_time).total_seconds() > 900:
+                await sio.emit('error', {'message': 'Edit time window expired (15 mins)'}, to=sid)
+                return
+                
+            encrypted_content = encrypt_message(val.new_content)
+            
             await db.messages.update_one(
                 {'message_id': val.message_id},
-                {'$pull': {'reactions': reaction}}
+                {'$set': {'content': encrypted_content, 'is_edited': True}}
             )
-            await sio.emit('reaction_removed', {
+            
+            await sio.emit('message_edited', {
                 'message_id': val.message_id,
-                'user_id': user_id,
-                'emoji': val.emoji
+                'new_content': val.new_content
+            }, room=val.conversation_id)
+        except ValidationError:
+            pass
+
+@sio.on('delete_message')
+async def delete_message(sid, data):
+    if sid in user_sockets:
+        try:
+            val = DeleteMessageEvent(**data)
+            user_id = user_sockets[sid]
+            
+            msg = await db.messages.find_one({'message_id': val.message_id})
+            if not msg or msg['sender_id'] != user_id:
+                await sio.emit('error', {'message': 'Cannot delete this message'}, to=sid)
+                return
+                
+            # 15 minute delete window validation
+            msg_time = datetime.fromisoformat(msg['timestamp'])
+            if (datetime.now(timezone.utc) - msg_time).total_seconds() > 900:
+                await sio.emit('error', {'message': 'Delete time window expired (15 mins)'}, to=sid)
+                return
+                
+            # Replace content with an empty string, set is_deleted flag, block out attachments.
+            empty_encrypted = encrypt_message('')
+            await db.messages.update_one(
+                {'message_id': val.message_id},
+                {
+                    '$set': {
+                        'content': empty_encrypted, 
+                        'is_deleted': True,
+                        'file_name': None,
+                        'message_type': 'text' 
+                    }
+                }
+            )
+            
+            await sio.emit('message_deleted', {
+                'message_id': val.message_id
             }, room=val.conversation_id)
         except ValidationError:
             pass

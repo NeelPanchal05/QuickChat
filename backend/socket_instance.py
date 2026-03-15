@@ -10,11 +10,12 @@ _cors_env = os.getenv('CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:30
 _allowed_origins = [o.strip() for o in _cors_env.split(',') if o.strip()]
 
 redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-try:
-    mgr = socketio.AsyncRedisManager(redis_url)
-except Exception:
-    mgr = None
-    print("Warning: Redis not configured or not available. Running socket.io without external manager.")
+# try:
+#     mgr = socketio.AsyncRedisManager(redis_url)
+# except Exception:
+#     mgr = None
+#     print("Warning: Redis not configured or not available. Running socket.io without external manager.")
+mgr = None
 
 sio = socketio.AsyncServer(
     async_mode='asgi',
