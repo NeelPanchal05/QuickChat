@@ -96,7 +96,7 @@ export default function ChatSidebar({
       </div>
     ));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations, selectedConversation, onlineUsers, t]);
+  }, [conversations, selectedConversation, onlineUsers, t, blockUser, deleteConversation]);
 
   return (
     <div

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { Phone, Video, Calendar, Shield, MoreVertical, Eraser, MessageCircle, X, Download, MapPin, Paperclip, Reply, Smile } from "lucide-react";
+import { Phone, Video, Calendar, Shield, MoreVertical, Eraser, MessageCircle, X, Download, MapPin, Paperclip, Reply, Smile, UserX } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useChat } from "@/contexts/ChatContext";
@@ -318,6 +318,7 @@ export default function ChatWindow({
   clearChat,
   isCurrentChatBlocked,
   downloadFile,
+  blockUser,
 }) {
   const { user, socket } = useAuth();
   const { t } = useLanguage();
@@ -436,6 +437,9 @@ export default function ChatWindow({
             <DropdownMenuContent align="end" className="w-48 text-foreground bg-popover border border-border">
               <DropdownMenuItem onClick={clearChat} className="text-destructive cursor-pointer text-sm">
                 <Eraser className="mr-2 h-4 w-4" /><span>{t("clear_chat")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => blockUser(e, selectedConversation?.other_user?.user_id)} className="text-destructive cursor-pointer text-sm">
+                <UserX className="mr-2 h-4 w-4" /><span>Block User</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

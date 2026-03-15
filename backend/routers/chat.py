@@ -169,6 +169,20 @@ async def save_attachment_message(
     if is_spam:
         raise HTTPException(status_code=429, detail=reason)
 
+    # Blocked check
+    conv = await db.conversations.find_one({'conversation_id': conversation_id})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    other_id = next((p for p in conv.get('participants', []) if p != current_user['user_id']), None)
+    if other_id:
+        recipient = await db.users.find_one({'user_id': other_id})
+        if recipient and current_user['user_id'] in recipient.get('blocked_users', []):
+            raise HTTPException(status_code=403, detail="You cannot send messages to this user.")
+        
+        if current_user['user_id'] in recipient.get('blocked_users', []) or other_id in current_user.get('blocked_users', []):
+             raise HTTPException(status_code=403, detail="Communication restricted due to blocking.")
+
     # ---- CDN Upload (Phase 13) -------------------------------------------
     # If Cloudinary is configured, upload media to CDN and store the URL.
     # The content going into the DB is either a CDN URL or the original (encrypted) data URI.

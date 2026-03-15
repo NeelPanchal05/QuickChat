@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { UserX, Unlock } from "lucide-react";
 
 export default function BlockedUsersManager({ onClose }) {
-  const { token, API } = useAuth();
+  const { token, API, fetchUser } = useAuth();
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,6 +40,7 @@ export default function BlockedUsersManager({ onClose }) {
         }
       );
       setBlockedUsers((prev) => prev.filter((u) => u.user_id !== userId));
+      await fetchUser(token);
       toast.success("User unblocked");
     } catch (e) {
       toast.error("Failed to unblock user");

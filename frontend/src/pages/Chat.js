@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import axios from "axios";
@@ -152,8 +152,8 @@ export default function Chat() {
     }
   };
 
-  const blockUser = async (e, userId) => {
-    e.stopPropagation();
+  const blockUser = useCallback(async (e, userId) => {
+    if (e) e.stopPropagation();
     if (!window.confirm("Are you sure you want to block this user?")) return;
     try {
       await axios.post(
@@ -169,7 +169,7 @@ export default function Chat() {
     } catch (error) {
       toast.error("Failed to block user");
     }
-  };
+  }, [API, token, fetchUser, selectedConversation, setSelectedConversation]);
 
   const deleteConversation = async (e, convId) => {
     e.stopPropagation();
@@ -297,6 +297,7 @@ export default function Chat() {
           clearChat={clearChat}
           isCurrentChatBlocked={isCurrentChatBlocked}
           downloadFile={downloadFile}
+          blockUser={blockUser}
         />
       ) : (
         <div className="hidden md:flex flex-1 items-center justify-center bg-background relative overflow-hidden">
