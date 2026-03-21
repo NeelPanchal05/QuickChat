@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useChatStore } from "@/hooks/useChatStore";
 import { useDialog } from "@/contexts/DialogContext";
 import { decryptMessage } from "@/utils/encryption";
 import {
@@ -51,8 +52,6 @@ const MemoizedMessageRow = React.memo(({
 }) => {
   const isOwn = user && m.sender_id === user.user_id;
 
-  if (m.message_type === "poll") return null;
-
   const myPrivateKey = user ? localStorage.getItem(`e2ee_private_key_${user.email}`) : null;
   const theirPublicKey = selectedConversation?.other_user?.public_key;
 
@@ -93,6 +92,8 @@ const MemoizedMessageRow = React.memo(({
   if (isVanishing && m.expires_at && timeLeft !== null && timeLeft <= 0) {
     return null;
   }
+
+  if (m.message_type === "poll") return null;
 
   return (
     <div className="py-1">
@@ -377,19 +378,19 @@ export default function ChatWindow({
   const { currentThemeData } = useTheme();
   const { confirm, prompt } = useDialog();
   
-  const {
-    selectedConversation,
-    setSelectedConversation,
-    onlineUsers,
-    typing,
-    fetchMessages,
-    hasMoreMessages,
-    messages,
-    isLoadingMessages,
-    setReplyingTo,
-    uploadProgress,
-    downloadProgress
-  } = useChat();
+  
+  const { fetchMessages } = useChat();
+
+  const selectedConversation = useChatStore(state => state.selectedConversation);
+  const setSelectedConversation = useChatStore(state => state.setSelectedConversation);
+  const onlineUsers = useChatStore(state => state.onlineUsers);
+  const typing = useChatStore(state => state.typing);
+  const hasMoreMessages = useChatStore(state => state.hasMoreMessages);
+  const messages = useChatStore(state => state.messages);
+  const isLoadingMessages = useChatStore(state => state.isLoadingMessages);
+  const setReplyingTo = useChatStore(state => state.setReplyingTo);
+  const uploadProgress = useChatStore(state => state.uploadProgress);
+  const downloadProgress = useChatStore(state => state.downloadProgress);
 
   const isUserOnline = (userId) => onlineUsers.has(userId);
 

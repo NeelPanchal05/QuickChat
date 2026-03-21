@@ -63,13 +63,18 @@ async def handle_message(sid, data):
         return
 
     other_id = next((p for p in conversation.get('participants', []) if p != user_id), None)
+    sender = None
     if other_id:
-        recipient = await db.users.find_one({'user_id': other_id})
+        users_cursor = db.users.find({'user_id': {'$in': [user_id, other_id]}}, {'user_id': 1, 'blocked_users': 1, 'real_name': 1})
+        users_db = await users_cursor.to_list(length=2)
+        
+        recipient = next((u for u in users_db if u.get('user_id') == other_id), None)
+        sender = next((u for u in users_db if u.get('user_id') == user_id), None)
+        
         if recipient and user_id in recipient.get('blocked_users', []):
             await sio.emit('error', {'message': 'You cannot send messages to this user.'}, to=sid)
             return
         
-        sender = await db.users.find_one({'user_id': user_id})
         if sender and other_id in sender.get('blocked_users', []):
             await sio.emit('error', {'message': 'You have blocked this user. Unblock to send messages.'}, to=sid)
             return
@@ -145,7 +150,7 @@ async def handle_read(sid, data):
             val = MessageReadEvent(**data)
             
             # Fetch message to check for Vanish Mode
-            msg = await db.messages.find_one({'message_id': val.message_id})
+            msg = await db.messages.find_one({'message_id': val.message_id}, {'expires_in': 1, 'expires_at': 1})
             expires_at_str = None
             if msg:
                 updates = {'$addToSet': {'read_by': user_sockets[sid]}}
@@ -176,7 +181,7 @@ async def handle_read_batch(sid, data):
         conversation_id = data.get('conversation_id')
         if message_ids:
             # We must process Vanish mode for batch reads
-            cursor = db.messages.find({'message_id': {'$in': message_ids}})
+            cursor = db.messages.find({'message_id': {'$in': message_ids}}, {'message_id': 1, 'expires_in': 1, 'expires_at': 1})
             messages = await cursor.to_list(length=len(message_ids))
             
             updates_by_expires = {}

@@ -24,28 +24,18 @@ export const ChatProvider = ({ children }) => {
   const setConversations = useChatStore(state => state.setConversations);
   const selectedConversation = useChatStore(state => state.selectedConversation);
   const setSelectedConversation = useChatStore(state => state.setSelectedConversation);
-  const messages = useChatStore(state => state.messages);
   const setMessages = useChatStore(state => state.setMessages);
-  const onlineUsers = useChatStore(state => state.onlineUsers);
   const setOnlineUsers = useChatStore(state => state.setOnlineUsers);
-  const callData = useChatStore(state => state.callData);
   const setCallData = useChatStore(state => state.setCallData);
-  const showCall = useChatStore(state => state.showCall);
   const setShowCall = useChatStore(state => state.setShowCall);
-  const typing = useChatStore(state => state.typing);
   const setTyping = useChatStore(state => state.setTyping);
-  const isLoadingMessages = useChatStore(state => state.isLoadingMessages);
   const setIsLoadingMessages = useChatStore(state => state.setIsLoadingMessages);
-  const hasMoreMessages = useChatStore(state => state.hasMoreMessages);
   const setHasMoreMessages = useChatStore(state => state.setHasMoreMessages);
-  const replyingTo = useChatStore(state => state.replyingTo);
   const setReplyingTo = useChatStore(state => state.setReplyingTo);
   const storeAddOptimisticMessage = useChatStore(state => state.addOptimisticMessage);
 
-  const uploadProgress = useChatStore(state => state.uploadProgress);
   const setUploadProgress = useChatStore(state => state.setUploadProgress);
   const clearUploadProgress = useChatStore(state => state.clearUploadProgress);
-  const downloadProgress = useChatStore(state => state.downloadProgress);
   const setDownloadProgress = useChatStore(state => state.setDownloadProgress);
   const clearDownloadProgress = useChatStore(state => state.clearDownloadProgress);
 
@@ -152,25 +142,15 @@ export const ChatProvider = ({ children }) => {
     setConversations,
     selectedConversation,
     setSelectedConversation,
-    messages,
     setMessages,
-    onlineUsers,
-    callData,
     setCallData,
-    showCall,
     setShowCall,
-    typing,
-    isLoadingMessages,
-    hasMoreMessages,
-    replyingTo,
     setReplyingTo,
     fetchConversations,
     fetchMessages,
     addOptimisticMessage,
-    uploadProgress,
     setUploadProgress,
     clearUploadProgress,
-    downloadProgress,
     setDownloadProgress,
     clearDownloadProgress
   };

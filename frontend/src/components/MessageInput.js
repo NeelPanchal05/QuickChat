@@ -16,7 +16,13 @@ export default function MessageInput({ isCurrentChatBlocked }) {
   const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
   const { t } = useLanguage();
   const { user, socket, API, token } = useAuth();
-  const { selectedConversation, addOptimisticMessage, replyingTo, setReplyingTo, setUploadProgress, clearUploadProgress } = useChat();
+  const { addOptimisticMessage } = useChat();
+  
+  const selectedConversation = useChatStore(state => state.selectedConversation);
+  const replyingTo = useChatStore(state => state.replyingTo);
+  const setReplyingTo = useChatStore(state => state.setReplyingTo);
+  const setUploadProgress = useChatStore(state => state.setUploadProgress);
+  const clearUploadProgress = useChatStore(state => state.clearUploadProgress);
   const addOfflineAction = useChatStore((state) => state.addOfflineAction);
 
 

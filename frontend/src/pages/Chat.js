@@ -52,6 +52,7 @@ import { useChat } from "@/contexts/ChatContext";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { useDialog } from "@/contexts/DialogContext";
 import NovaChatWindow from "@/components/NovaChatWindow";
+import { useChatStore } from "@/hooks/useChatStore";
 
 export default function Chat() {
   const GifPicker = React.lazy(() => import("@/components/GifPicker"));
@@ -60,23 +61,18 @@ export default function Chat() {
   const { user, token, socket, logout, API, fetchUser } = useAuth();
   const { t } = useLanguage();
   const { confirm } = useDialog();
-  
-  const {
-    conversations,
-    setConversations,
-    selectedConversation,
-    setSelectedConversation,
-    messages,
-    onlineUsers,
-    showCall,
-    setShowCall,
-    callData,
-    setCallData,
-    addOptimisticMessage,
-    fetchConversations,
-    setDownloadProgress,
-    clearDownloadProgress,
-  } = useChat();
+  const { addOptimisticMessage, fetchConversations } = useChat();
+
+  const conversations = useChatStore(state => state.conversations);
+  const setConversations = useChatStore(state => state.setConversations);
+  const selectedConversation = useChatStore(state => state.selectedConversation);
+  const setSelectedConversation = useChatStore(state => state.setSelectedConversation);
+  const showCall = useChatStore(state => state.showCall);
+  const setShowCall = useChatStore(state => state.setShowCall);
+  const callData = useChatStore(state => state.callData);
+  const setCallData = useChatStore(state => state.setCallData);
+  const setDownloadProgress = useChatStore(state => state.setDownloadProgress);
+  const clearDownloadProgress = useChatStore(state => state.clearDownloadProgress);
 
   // UI States
   const [searchQuery, setSearchQuery] = useState("");
@@ -286,8 +282,7 @@ export default function Chat() {
     }
   };
   
-  const memoizedMessages = messages;
-
+  
   return (
     <div className="h-screen flex flex-col md:flex-row overflow-hidden bg-background">
       {/* Sidebar */}

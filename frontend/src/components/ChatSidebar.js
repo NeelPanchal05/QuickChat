@@ -12,6 +12,7 @@ import {
 import SettingsMenu from "@/components/SettingsMenu";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useChat } from "@/contexts/ChatContext";
+import { useChatStore } from "@/hooks/useChatStore";
 
 export default function ChatSidebar({
   setShowInvite,
@@ -29,7 +30,10 @@ export default function ChatSidebar({
   deleteConversation,
 }) {
   const { t } = useLanguage();
-  const { conversations, selectedConversation, setSelectedConversation, onlineUsers } = useChat();
+  const conversations = useChatStore(state => state.conversations);
+  const selectedConversation = useChatStore(state => state.selectedConversation);
+  const setSelectedConversation = useChatStore(state => state.setSelectedConversation);
+  const onlineUsers = useChatStore(state => state.onlineUsers);
 
   const isUserOnline = (userId) => onlineUsers.has(userId);
 

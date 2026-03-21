@@ -7,11 +7,11 @@ import { Send, Image as ImageIcon, X, Sparkles, Loader2, RefreshCw, ArrowLeft } 
 import axios from "axios";
 import { toast } from "sonner";
 
-import { useChat } from "@/contexts/ChatContext";
+import { useChatStore } from "@/hooks/useChatStore";
 
 export default function NovaChatWindow() {
   const { user, token, API } = useAuth();
-  const { setSelectedConversation } = useChat();
+  const setSelectedConversation = useChatStore(state => state.setSelectedConversation);
   
   const [messages, setMessages] = useState([
     {
