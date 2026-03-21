@@ -58,11 +58,18 @@ export const ChatProvider = ({ children }) => {
       const res = await api.get('/conversations');
       if (res.status === 200) {
         setConversations(res.data);
+        const onlineSet = new Set();
+        res.data.forEach(conv => {
+            if (conv.other_user?.online_status === 'online') {
+                onlineSet.add(conv.other_user.user_id);
+            }
+        });
+        setOnlineUsers(prev => new Set([...prev, ...onlineSet]));
       }
     } catch (e) {
       console.error("Failed to fetch conversations");
     }
-  }, [token, setConversations]);
+  }, [token, setConversations, setOnlineUsers]);
 
   const fetchMessages = useCallback(
     async (convId, filters = {}, append = false) => {
