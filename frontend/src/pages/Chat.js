@@ -51,6 +51,7 @@ import {
 import { useChat } from "@/contexts/ChatContext";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { useDialog } from "@/contexts/DialogContext";
+import NovaChatWindow from "@/components/NovaChatWindow";
 
 export default function Chat() {
   const GifPicker = React.lazy(() => import("@/components/GifPicker"));
@@ -307,7 +308,9 @@ export default function Chat() {
       />
 
       {/* Chat Area */}
-      {selectedConversation ? (
+      {selectedConversation?.is_nova ? (
+        <NovaChatWindow />
+      ) : selectedConversation ? (
         <ChatWindow
           startCall={startCall}
           dateSearch={dateSearch}

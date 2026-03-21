@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Search, MessageCircle, UserPlus, Pin, MoreVertical, UserX, Trash2 } from "lucide-react";
+import { Search, MessageCircle, UserPlus, Pin, MoreVertical, UserX, Trash2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -163,6 +163,27 @@ export default function ChatSidebar({
         )}
       </div>
       <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {/* Nova AI Dedicated Button */}
+        <div
+          onClick={() => setSelectedConversation({ is_nova: true, conversation_id: 'nova' })}
+          className={`conv-row group p-4 border-b border-border cursor-pointer relative text-foreground ${
+            selectedConversation?.is_nova ? "active" : ""
+          }`}
+          style={selectedConversation?.is_nova ? { background: 'linear-gradient(90deg, rgba(32, 227, 178, 0.1) 0%, transparent 100%)', borderLeft: '3px solid #20e3b2' } : {}}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full flex items-center justify-center relative shadow-sm" style={{ background: 'linear-gradient(135deg, #0cebeb, #20e3b2, #29ffc6)' }}>
+              <div className="absolute inset-[2px] bg-card rounded-full flex items-center justify-center">
+                 <Sparkles size={20} style={{ color: '#20e3b2' }} />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="font-bold text-sm" style={{ color: '#20e3b2' }}>Nova AI</span>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">Your intelligent assistant</p>
+            </div>
+          </div>
+        </div>
+
         {memoizedConversations}
       </div>
     </div>

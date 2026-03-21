@@ -16,7 +16,7 @@ from socket_instance import sio, _allowed_origins
 import socket_events
 
 # Import routers
-from routers import auth, users, chat, push
+from routers import auth, users, chat, push, ai
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -61,5 +61,6 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(chat.router)
 app.include_router(push.router)
+app.include_router(ai.router)
 
 app_asgi = socketio.ASGIApp(sio, app)
