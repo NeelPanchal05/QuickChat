@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -55,10 +55,10 @@ const MemoizedMessageRow = React.memo(({
   const myPrivateKey = user ? localStorage.getItem(`e2ee_private_key_${user.email}`) : null;
   const theirPublicKey = selectedConversation?.other_user?.public_key;
 
-  const decryptedContent = decryptMessage(m.content, myPrivateKey, theirPublicKey);
+  const decryptedContent = useMemo(() => decryptMessage(m.content, myPrivateKey, theirPublicKey), [m.content, myPrivateKey, theirPublicKey]);
 
-  const repliedMessage = m.reply_to ? messages.find(msg => msg.message_id === m.reply_to) : null;
-  const decryptedRepliedContent = repliedMessage ? decryptMessage(repliedMessage.content, myPrivateKey, theirPublicKey) : null;
+  const repliedMessage = useMemo(() => m.reply_to ? messages.find(msg => msg.message_id === m.reply_to) : null, [m.reply_to, messages]);
+  const decryptedRepliedContent = useMemo(() => repliedMessage ? decryptMessage(repliedMessage.content, myPrivateKey, theirPublicKey) : null, [repliedMessage, myPrivateKey, theirPublicKey]);
 
   const currentDate = formatMessageDate(m.timestamp, t);
   const prevDate = index > 0 ? formatMessageDate(messages[index - 1].timestamp, t) : null;
@@ -149,7 +149,7 @@ const MemoizedMessageRow = React.memo(({
           )}
           {m.message_type?.startsWith("image") && (
             <div className={`relative group overflow-hidden rounded-xl min-h-[60px] min-w-[100px] bg-black/10 ${isVanishing && !isOwn ? 'blur-md hover:blur-none transition-all duration-300' : ''}`}>
-              <img src={decryptedContent} alt="attachment" className="w-full max-h-60 object-cover" />
+              <img src={decryptedContent} alt="attachment" className="w-full max-h-60 object-cover" loading="lazy" />
               <button
                 onClick={() => downloadFile(decryptedContent, m.file_name || "image", m.message_id)}
                 className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all z-10"
@@ -444,7 +444,7 @@ export default function ChatWindow({
           <div className="relative">
             <div className="rounded-full p-[2px]" style={{background: 'linear-gradient(135deg,#7c3aed,#4f46e5)'}}>
               <Avatar className="h-9 w-9">
-                <AvatarImage src={selectedConversation.other_user?.profile_photo} />
+                <AvatarImage src={selectedConversation.other_user?.profile_photo} loading="lazy" />
                 <AvatarFallback style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)',color:'white',fontWeight:700,fontFamily:"'Space Grotesk',sans-serif"}}>
                   {selectedConversation.other_user?.username?.[0]?.toUpperCase() ?? "?"}
                 </AvatarFallback>

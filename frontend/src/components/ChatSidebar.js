@@ -51,7 +51,7 @@ export default function ChatSidebar({
         <div className="flex items-center gap-3">
           <div className="relative flex-shrink-0">
             <Avatar className="h-11 w-11 ring-2" style={{ringColor: selectedConversation?.conversation_id === c.conversation_id ? 'rgba(139,92,246,0.5)' : 'transparent'}}>
-              <AvatarImage src={c.other_user?.profile_photo} />
+              <AvatarImage src={c.other_user?.profile_photo} loading="lazy" />
               <AvatarFallback style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)',color:'white',fontFamily:"'Space Grotesk',sans-serif",fontWeight:700}}>{c.other_user?.username?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
             </Avatar>
             {isUserOnline(c.other_user?.user_id) && (
@@ -154,7 +154,7 @@ export default function ChatSidebar({
                 className="p-3 hover:bg-accent cursor-pointer flex items-center gap-3 transition-colors"
               >
                 <Avatar className="h-8 w-8 ring-1" style={{ringColor:'rgba(139,92,246,0.3)'}}>
-                  <AvatarImage src={u.profile_photo} />
+                  <AvatarImage src={u.profile_photo} loading="lazy" />
                   <AvatarFallback style={{background:'linear-gradient(135deg,#7c3aed,#4f46e5)',color:'white',fontSize:'12px'}}>{u.username[0].toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div>

@@ -29,15 +29,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker from "emoji-picker-react";
-import CallModal from "@/components/CallModal";
+const CallModal = React.lazy(() => import("@/components/CallModal"));
 import SettingsMenu from "@/components/SettingsMenu";
-import ChatBackgroundSelector from "@/components/ChatBackgroundSelector";
-import CallHistory from "@/components/CallHistory";
-import PrivacyManager from "@/components/PrivacyManager";
+const ChatBackgroundSelector = React.lazy(() => import("@/components/ChatBackgroundSelector"));
+const CallHistory = React.lazy(() => import("@/components/CallHistory"));
+const PrivacyManager = React.lazy(() => import("@/components/PrivacyManager"));
 import MediaUploader from "@/components/MediaUploader";
 import MessageReadStatus from "@/components/MessageReadStatus";
-import Profile from "@/pages/Profile";
-import TermsAndConditions from "@/pages/TermsAndConditions";
+const Profile = React.lazy(() => import("@/pages/Profile"));
+const TermsAndConditions = React.lazy(() => import("@/pages/TermsAndConditions"));
 import ChatSidebar from "@/components/ChatSidebar";
 import ChatWindow from "@/components/ChatWindow";
 import MessageInput from "@/components/MessageInput";
@@ -57,6 +57,7 @@ import { useChatStore } from "@/hooks/useChatStore";
 export default function Chat() {
   const GifPicker = React.lazy(() => import("@/components/GifPicker"));
   const DarkVeil = React.lazy(() => import("@/components/DarkVeil"));
+  const debounceSearchTimerRef = React.useRef(null);
 
   const { user, token, socket, logout, API, fetchUser } = useAuth();
   const { t } = useLanguage();
@@ -98,20 +99,23 @@ export default function Chat() {
 
   // --- API Functions ---
 
-  const searchUsers = async (query) => {
+  const searchUsers = useCallback((query) => {
+    if (debounceSearchTimerRef.current) clearTimeout(debounceSearchTimerRef.current);
     if (!query.trim()) {
       setSearchResults([]);
       return;
     }
-    try {
-      const res = await axios.get(`${API}/users/search?query=${query}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setSearchResults(res.data);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+    debounceSearchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await axios.get(`${API}/users/search?query=${query}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setSearchResults(res.data);
+      } catch (e) {
+        console.error(e);
+      }
+    }, 400);
+  }, [API, token]);
 
   const createOrOpenConversation = async (userId) => {
     try {
@@ -349,24 +353,30 @@ export default function Chat() {
 
       {/* Modals & Dialogs */}
       {showCall && callData && (
-        <CallModal
-          callData={callData}
-          socket={socket}
-          userId={user?.user_id}
-          onClose={() => {
-            setShowCall(false);
-            setCallData(null);
-          }}
-        />
+        <React.Suspense fallback={null}>
+          <CallModal
+            callData={callData}
+            socket={socket}
+            userId={user?.user_id}
+            onClose={() => {
+              setShowCall(false);
+              setCallData(null);
+            }}
+          />
+        </React.Suspense>
       )}
       <Dialog open={showProfile} onOpenChange={setShowProfile}>
         <DialogContent className="max-w-xl bg-card border-border">
-          <Profile user={user} onBack={() => setShowProfile(false)} />
+          <React.Suspense fallback={null}>
+            <Profile user={user} onBack={() => setShowProfile(false)} />
+          </React.Suspense>
         </DialogContent>
       </Dialog>
       <Dialog open={showTerms} onOpenChange={setShowTerms}>
         <DialogContent className="max-w-3xl bg-card border-border">
-          <TermsAndConditions onBack={() => setShowTerms(false)} />
+          <React.Suspense fallback={null}>
+            <TermsAndConditions onBack={() => setShowTerms(false)} />
+          </React.Suspense>
         </DialogContent>
       </Dialog>
       <Dialog
@@ -374,17 +384,23 @@ export default function Chat() {
         onOpenChange={setShowBackgroundSelector}
       >
         <DialogContent className="max-w-xl bg-card border-border">
-          <ChatBackgroundSelector />
+          <React.Suspense fallback={null}>
+            <ChatBackgroundSelector />
+          </React.Suspense>
         </DialogContent>
       </Dialog>
       <Dialog open={showCallHistory} onOpenChange={setShowCallHistory}>
         <DialogContent className="max-w-xl bg-card border-border">
-          <CallHistory onClose={() => setShowCallHistory(false)} />
+          <React.Suspense fallback={null}>
+            <CallHistory onClose={() => setShowCallHistory(false)} />
+          </React.Suspense>
         </DialogContent>
       </Dialog>
       <Dialog open={showPrivacy} onOpenChange={setShowPrivacy}>
         <DialogContent className="max-w-xl bg-card border-border p-0">
-          <PrivacyManager onClose={() => setShowPrivacy(false)} />
+          <React.Suspense fallback={null}>
+            <PrivacyManager onClose={() => setShowPrivacy(false)} />
+          </React.Suspense>
         </DialogContent>
       </Dialog>
       <Dialog open={showGifPicker} onOpenChange={setShowGifPicker}>
