@@ -65,11 +65,33 @@ const MemoizedMessageRow = React.memo(({
   const prevDate = index > 0 ? formatMessageDate(messages[index - 1].timestamp, t) : null;
   const showDateSeparator = currentDate !== prevDate;
 
-  // Vanish Mode countdown calculated dynamically (React component rerenders will catch this, or we could use an interval, but for now a static compute on render works mostly if interacting)
   const isVanishing = m.expires_in > 0;
-  let remainingSeconds = isVanishing ? m.expires_in : null;
-  if (isVanishing && m.expires_at) {
-      remainingSeconds = Math.max(0, Math.floor((new Date(m.expires_at).getTime() - Date.now()) / 1000));
+  
+  const calculateRemaining = useCallback(() => {
+    if (!m.expires_at) return m.expires_in;
+    return Math.max(0, Math.floor((new Date(m.expires_at).getTime() - Date.now()) / 1000));
+  }, [m.expires_at, m.expires_in]);
+
+  const [timeLeft, setTimeLeft] = useState(isVanishing ? calculateRemaining() : null);
+
+  useEffect(() => {
+    if (!isVanishing) return;
+    setTimeLeft(calculateRemaining());
+    if (m.expires_at && calculateRemaining() > 0) {
+      const timer = setInterval(() => {
+        const remaining = calculateRemaining();
+        setTimeLeft(remaining);
+        if (remaining <= 0) {
+          clearInterval(timer);
+        }
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [isVanishing, m.expires_at, calculateRemaining]);
+
+  // If the message has expired, do not render it.
+  if (isVanishing && m.expires_at && timeLeft !== null && timeLeft <= 0) {
+    return null;
   }
 
   return (
@@ -230,7 +252,7 @@ const MemoizedMessageRow = React.memo(({
             {isVanishing && (
               <span className="text-[10px] flex items-center gap-0.5" style={{opacity: 0.9, color: m.expires_at ? '#ef4444' : 'inherit'}}>
                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
-                 {m.expires_at ? `${remainingSeconds}s` : `${m.expires_in}s`}
+                 {timeLeft !== null ? `${timeLeft}s` : '...'}
               </span>
             )}
             {m.is_edited && (

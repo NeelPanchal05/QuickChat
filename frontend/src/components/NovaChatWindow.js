@@ -3,12 +3,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, Image as ImageIcon, X, Sparkles, Loader2, RefreshCw } from "lucide-react";
+import { Send, Image as ImageIcon, X, Sparkles, Loader2, RefreshCw, ArrowLeft } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
+import { useChat } from "@/contexts/ChatContext";
+
 export default function NovaChatWindow() {
   const { user, token, API } = useAuth();
+  const { setSelectedConversation } = useChat();
   
   const [messages, setMessages] = useState([
     {
@@ -134,6 +137,13 @@ export default function NovaChatWindow() {
       {/* Header */}
       <div className="p-3 md:p-4 flex justify-between items-center z-10 flex-shrink-0 bg-card/80 border-b border-border backdrop-blur-xl">
         <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setSelectedConversation(null)}
+            className="md:hidden p-2 -ml-2 rounded-full hover:bg-muted text-muted-foreground transition-colors mr-1"
+            title="Back to chats"
+          >
+            <ArrowLeft size={24} />
+          </button>
           <div className="relative">
             <div className="rounded-full p-[2px]" style={{background: 'linear-gradient(135deg, #0cebeb, #20e3b2, #29ffc6)'}}>
               <Avatar className="h-9 w-9 border-2 border-background">

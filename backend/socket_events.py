@@ -146,6 +146,7 @@ async def handle_read(sid, data):
             
             # Fetch message to check for Vanish Mode
             msg = await db.messages.find_one({'message_id': val.message_id})
+            expires_at_str = None
             if msg:
                 updates = {'$addToSet': {'read_by': user_sockets[sid]}}
                 
@@ -153,12 +154,17 @@ async def handle_read(sid, data):
                 if msg.get('expires_in', 0) > 0 and not msg.get('expires_at'):
                     expires_at = datetime.now(timezone.utc) + timedelta(seconds=msg['expires_in'])
                     updates['$set'] = {'expires_at': expires_at}
+                    expires_at_str = expires_at.isoformat()
+                elif msg.get('expires_at'):
+                    # if it was already set, we could broadcast it anyway but normally it's already there
+                    expires_at_str = msg['expires_at'].isoformat() if isinstance(msg['expires_at'], datetime) else msg['expires_at']
                     
                 await db.messages.update_one({'message_id': val.message_id}, updates)
                 
             await sio.emit('message_read', {
                 'message_id': val.message_id, 
-                'user_id': user_sockets[sid]
+                'user_id': user_sockets[sid],
+                'expires_at': expires_at_str
             }, room=val.conversation_id)
         except ValidationError:
             pass
@@ -169,13 +175,43 @@ async def handle_read_batch(sid, data):
         message_ids = data.get('message_ids', [])
         conversation_id = data.get('conversation_id')
         if message_ids:
-            await db.messages.update_many(
-                {'message_id': {'$in': message_ids}},
-                {'$addToSet': {'read_by': user_sockets[sid]}}
-            )
+            # We must process Vanish mode for batch reads
+            cursor = db.messages.find({'message_id': {'$in': message_ids}})
+            messages = await cursor.to_list(length=len(message_ids))
+            
+            updates_by_expires = {}
+            expires_at_map = {}
+            base_updates = []
+            
+            for msg in messages:
+                if msg.get('expires_in', 0) > 0 and not msg.get('expires_at'):
+                    # Message is in vanish mode and timer hasn't started!
+                    expires_at = datetime.now(timezone.utc) + timedelta(seconds=msg['expires_in'])
+                    await db.messages.update_one(
+                        {'message_id': msg['message_id']},
+                        {
+                            '$addToSet': {'read_by': user_sockets[sid]},
+                            '$set': {'expires_at': expires_at}
+                        }
+                    )
+                    expires_at_map[msg['message_id']] = expires_at.isoformat()
+                else:
+                    # Message is normal OR already vanishing
+                    base_updates.append(msg['message_id'])
+                    if msg.get('expires_at'):
+                         expires_at_map[msg['message_id']] = msg['expires_at'].isoformat() if isinstance(msg['expires_at'], datetime) else msg['expires_at']
+            
+            # Batch update read_by for messages that didn't need a specific new expires_at
+            if base_updates:
+                await db.messages.update_many(
+                    {'message_id': {'$in': base_updates}},
+                    {'$addToSet': {'read_by': user_sockets[sid]}}
+                )
+
             await sio.emit('messages_read_batch', {
                 'message_ids': message_ids,
-                'user_id': user_sockets[sid]
+                'user_id': user_sockets[sid],
+                'expires_at_map': expires_at_map
             }, room=conversation_id)
 
 @sio.on('react_to_message')

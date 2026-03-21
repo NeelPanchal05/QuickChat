@@ -104,7 +104,11 @@ export const useChatSocket = ({
       setMessages((prev) =>
         prev.map((m) =>
           m.message_id === data.message_id
-            ? { ...m, read_by: [...new Set([...(m.read_by || []), data.user_id])] }
+            ? { 
+                ...m, 
+                read_by: [...new Set([...(m.read_by || []), data.user_id])],
+                ...(data.expires_at ? { expires_at: data.expires_at } : {})
+              }
             : m
         )
       );
@@ -112,10 +116,16 @@ export const useChatSocket = ({
 
     const handleMessagesReadBatch = (data) => {
       const msgIdSet = new Set(data.message_ids);
+      const expiresMap = data.expires_at_map || {};
+      
       setMessages((prev) =>
         prev.map((m) =>
           msgIdSet.has(m.message_id)
-            ? { ...m, read_by: [...new Set([...(m.read_by || []), data.user_id])] }
+            ? { 
+                ...m, 
+                read_by: [...new Set([...(m.read_by || []), data.user_id])],
+                ...(expiresMap[m.message_id] ? { expires_at: expiresMap[m.message_id] } : {})
+              }
             : m
         )
       );
