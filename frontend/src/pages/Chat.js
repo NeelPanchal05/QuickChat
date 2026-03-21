@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/dialog";
 import { useChat } from "@/contexts/ChatContext";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
+import { useDialog } from "@/contexts/DialogContext";
 
 export default function Chat() {
   const GifPicker = React.lazy(() => import("@/components/GifPicker"));
@@ -57,6 +58,7 @@ export default function Chat() {
 
   const { user, token, socket, logout, API, fetchUser } = useAuth();
   const { t } = useLanguage();
+  const { confirm } = useDialog();
   
   const {
     conversations,
@@ -154,7 +156,13 @@ export default function Chat() {
 
   const blockUser = useCallback(async (e, userId) => {
     if (e) e.stopPropagation();
-    if (!window.confirm("Are you sure you want to block this user?")) return;
+    const isConfirmed = await confirm({
+      title: "Block User",
+      description: "Are you sure you want to block this user?",
+      confirmText: "Block",
+      cancelText: "Cancel",
+    });
+    if (!isConfirmed) return;
     try {
       await axios.post(
         `${API}/users/block/${userId}`,
@@ -169,12 +177,17 @@ export default function Chat() {
     } catch (error) {
       toast.error("Failed to block user");
     }
-  }, [API, token, fetchUser, selectedConversation, setSelectedConversation]);
+  }, [API, token, fetchUser, selectedConversation, setSelectedConversation, confirm]);
 
   const deleteConversation = async (e, convId) => {
     e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this conversation?"))
-      return;
+    const isConfirmed = await confirm({
+      title: "Delete Conversation",
+      description: "Are you sure you want to delete this conversation?",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+    });
+    if (!isConfirmed) return;
     try {
       await axios.delete(`${API}/conversations/${convId}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -192,7 +205,13 @@ export default function Chat() {
 
   const clearChat = async () => {
     if (!selectedConversation) return;
-    if (!window.confirm("Clear all messages?")) return;
+    const isConfirmed = await confirm({
+      title: "Clear Chat",
+      description: "Clear all messages? This action cannot be undone.",
+      confirmText: "Clear",
+      cancelText: "Cancel",
+    });
+    if (!isConfirmed) return;
     try {
       await axios.delete(
         `${API}/conversations/${selectedConversation.conversation_id}/messages`,

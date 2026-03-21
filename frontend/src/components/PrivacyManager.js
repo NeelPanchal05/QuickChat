@@ -18,9 +18,11 @@ import {
 import axios from "axios";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useDialog } from "@/contexts/DialogContext";
 
 export default function PrivacyManager({ onClose }) {
   const { user, token, API, logout, fetchUser } = useAuth();
+  const { prompt } = useDialog();
 
   // Security State
   const [passData, setPassData] = useState({
@@ -120,10 +122,13 @@ export default function PrivacyManager({ onClose }) {
   };
 
   const handleDeleteAccount = async () => {
-    const confirm = window.prompt(
-      "Type 'DELETE' to confirm account deletion. This cannot be undone."
-    );
-    if (confirm !== "DELETE") return;
+    const confirmation = await prompt({
+      title: "Delete Account",
+      description: "Type 'DELETE' to confirm account deletion. This cannot be undone.",
+      confirmText: "Delete My Account",
+      cancelText: "Cancel",
+    });
+    if (confirmation !== "DELETE") return;
 
     try {
       await axios.delete(`${API}/auth/delete-account`, {

@@ -472,3 +472,27 @@
   box-shadow: 0 0 28px rgba(139,92,246,0.55);
 }
 .ripple-btn:active { transform: scale(0.93); }
+
+/* ═══════════════════════════════════════════════════
+   CUSTOM AUDIO PLAYER
+═══════════════════════════════════════════════════ */
+.custom-audio-player {
+  border-radius: 99px;
+}
+.custom-audio-player::-webkit-media-controls-panel {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-radius: 99px;
+  backdrop-filter: blur(4px);
+}
+.dark .custom-audio-player::-webkit-media-controls-panel {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
+.custom-audio-player::-webkit-media-controls-play-button,
+.custom-audio-player::-webkit-media-controls-mute-button {
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+.dark .custom-audio-player::-webkit-media-controls-play-button,
+.dark .custom-audio-player::-webkit-media-controls-mute-button {
+  background-color: rgba(255, 255, 255, 0.1);
+}

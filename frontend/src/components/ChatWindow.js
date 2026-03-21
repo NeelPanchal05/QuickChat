@@ -7,6 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDialog } from "@/contexts/DialogContext";
 import { decryptMessage } from "@/utils/encryption";
 import {
   Popover,
@@ -45,7 +46,8 @@ const formatMessageDate = (timestamp, t) => {
 // and messages.find() on EVERY scrolling frame!
 const MemoizedMessageRow = React.memo(({ 
   m, index, messages, user, selectedConversation, t, downloadFile, 
-  uploadProgress, downloadProgress, socket, setReplyingTo
+  uploadProgress, downloadProgress, socket, setReplyingTo,
+  confirm, prompt
 }) => {
   const isOwn = user && m.sender_id === user.user_id;
 
@@ -148,7 +150,7 @@ const MemoizedMessageRow = React.memo(({
               )}
             </div>
           )}
-          {m.message_type && ["audio", "video"].includes(m.message_type.split("/")[0]) && (
+          {m.message_type && m.message_type.startsWith("video/") && (
             <div className="relative group overflow-hidden rounded-xl min-h-[60px] min-w-[200px] bg-black/10">
               <video controls src={decryptedContent} className="max-w-full rounded-xl relative z-10" />
               {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
@@ -162,6 +164,25 @@ const MemoizedMessageRow = React.memo(({
                         className="transition-all duration-150 ease-out" />
                     </svg>
                     <span className="absolute text-white text-[10px] font-bold">{uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {m.message_type && m.message_type.startsWith("audio/") && (
+            <div className="relative group overflow-hidden rounded-full min-w-[240px] max-w-[300px] bg-white/10 dark:bg-black/20 p-1 flex items-center backdrop-blur-md shadow-sm border border-white/10">
+              <audio controls src={decryptedContent} className="w-full h-10 outline-none opacity-90 hover:opacity-100 transition-opacity custom-audio-player" />
+              {(uploadProgress[m.message_id] !== undefined || downloadProgress[m.message_id] !== undefined) && (
+                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center backdrop-blur-sm z-20 transition-all duration-300 rounded-full">
+                  <div className="w-8 h-8 relative flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="16" cy="16" r="14" stroke="rgba(255,255,255,0.2)" strokeWidth="3" fill="none" />
+                      <circle cx="16" cy="16" r="14" stroke="white" strokeWidth="3" fill="none" 
+                        strokeDasharray="87.9" 
+                        strokeDashoffset={87.9 - (87.9 * (uploadProgress[m.message_id] ?? downloadProgress[m.message_id])) / 100} 
+                        className="transition-all duration-150 ease-out" />
+                    </svg>
+                    <span className="absolute text-white text-[8px] font-bold">{uploadProgress[m.message_id] ?? downloadProgress[m.message_id]}</span>
                   </div>
                 </div>
               )}
@@ -277,16 +298,25 @@ const MemoizedMessageRow = React.memo(({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-32 z-50 border border-border bg-popover text-foreground rounded-lg shadow-xl">
-                 <DropdownMenuItem onClick={() => {
-                    const newText = prompt("Edit your message:", decryptedContent);
+                 <DropdownMenuItem onClick={async () => {
+                    const newText = await prompt({
+                        title: "Edit Message",
+                        defaultValue: decryptedContent,
+                        confirmText: "Save",
+                    });
                     if (newText !== null && newText.trim() !== "" && newText !== decryptedContent) {
                         socket.emit("edit_message", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id, new_content: newText.trim() });
                     }
                  }} className="text-sm cursor-pointer">
                     Edit
                  </DropdownMenuItem>
-                 <DropdownMenuItem onClick={() => {
-                    if (window.confirm("Are you sure you want to delete this message?")) {
+                 <DropdownMenuItem onClick={async () => {
+                    const isConfirmed = await confirm({
+                        title: "Delete Message",
+                        description: "Are you sure you want to delete this message?",
+                        confirmText: "Delete",
+                    });
+                    if (isConfirmed) {
                         socket.emit("delete_message", { message_id: m.message_id, conversation_id: selectedConversation.conversation_id });
                     }
                  }} className="text-sm cursor-pointer text-destructive focus:text-destructive">
@@ -323,6 +353,7 @@ export default function ChatWindow({
   const { user, socket } = useAuth();
   const { t } = useLanguage();
   const { currentThemeData } = useTheme();
+  const { confirm, prompt } = useDialog();
   
   const {
     selectedConversation,
@@ -479,6 +510,8 @@ export default function ChatWindow({
               downloadProgress={downloadProgress} 
               socket={socket} 
               setReplyingTo={setReplyingTo} 
+              confirm={confirm}
+              prompt={prompt}
             />
           )}
         />

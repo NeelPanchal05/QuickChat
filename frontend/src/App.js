@@ -6,6 +6,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { SoundProvider } from "./contexts/SoundContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { ChatProvider } from "./contexts/ChatContext";
+import { DialogProvider } from "./contexts/DialogContext";
 
 // --- OPTIMIZATION: Lazy Load Pages ---
 const Login = lazy(() => import("./pages/Login"));
@@ -60,9 +61,10 @@ export default function App() {
       <AuthProvider>
         <ThemeProvider>
           <SoundProvider>
-            <LanguageProvider>
-              <div className="bg-background text-foreground min-h-screen">
-                <Suspense fallback={<PageLoader />}>
+            <DialogProvider>
+              <LanguageProvider>
+                <div className="bg-background text-foreground min-h-screen">
+                  <Suspense fallback={<PageLoader />}>
                   <Routes>
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
@@ -92,9 +94,10 @@ export default function App() {
                 <Toaster />
               </div>
             </LanguageProvider>
-          </SoundProvider>
-        </ThemeProvider>
-      </AuthProvider>
-    </BrowserRouter>
+          </DialogProvider>
+        </SoundProvider>
+      </ThemeProvider>
+    </AuthProvider>
+  </BrowserRouter>
   );
 }
