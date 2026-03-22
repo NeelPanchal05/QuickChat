@@ -25,20 +25,36 @@ export const useChatStore = create(
     offlineActionQueue: state.offlineActionQueue.filter(a => a.id !== id)
   })),
 
-  setConversations: (conversations) => set({ conversations }),
-  setSelectedConversation: (conversation) => set({ selectedConversation: conversation }),
-  setReplyingTo: (replyingTo) => set({ replyingTo }),
+  setConversations: (conversationsUpdater) => set((state) => ({
+    conversations: typeof conversationsUpdater === 'function' ? conversationsUpdater(state.conversations) : conversationsUpdater
+  })),
+  setSelectedConversation: (conversationUpdater) => set((state) => ({
+    selectedConversation: typeof conversationUpdater === 'function' ? conversationUpdater(state.selectedConversation) : conversationUpdater
+  })),
+  setReplyingTo: (replyingToUpdater) => set((state) => ({
+    replyingTo: typeof replyingToUpdater === 'function' ? replyingToUpdater(state.replyingTo) : replyingToUpdater
+  })),
   setMessages: (messagesUpdater) => set((state) => ({
     messages: typeof messagesUpdater === 'function' ? messagesUpdater(state.messages) : messagesUpdater
   })),
   setOnlineUsers: (usersUpdater) => set((state) => ({
     onlineUsers: typeof usersUpdater === 'function' ? usersUpdater(state.onlineUsers) : usersUpdater
   })),
-  setCallData: (callData) => set({ callData }),
-  setShowCall: (showCall) => set({ showCall }),
-  setTyping: (typing) => set({ typing }),
-  setIsLoadingMessages: (isLoadingMessages) => set({ isLoadingMessages }),
-  setHasMoreMessages: (hasMoreMessages) => set({ hasMoreMessages }),
+  setCallData: (callDataUpdater) => set((state) => ({
+    callData: typeof callDataUpdater === 'function' ? callDataUpdater(state.callData) : callDataUpdater
+  })),
+  setShowCall: (showCallUpdater) => set((state) => ({
+    showCall: typeof showCallUpdater === 'function' ? showCallUpdater(state.showCall) : showCallUpdater
+  })),
+  setTyping: (typingUpdater) => set((state) => ({
+    typing: typeof typingUpdater === 'function' ? typingUpdater(state.typing) : typingUpdater
+  })),
+  setIsLoadingMessages: (isLoadingMessagesUpdater) => set((state) => ({
+    isLoadingMessages: typeof isLoadingMessagesUpdater === 'function' ? isLoadingMessagesUpdater(state.isLoadingMessages) : isLoadingMessagesUpdater
+  })),
+  setHasMoreMessages: (hasMoreMessagesUpdater) => set((state) => ({
+    hasMoreMessages: typeof hasMoreMessagesUpdater === 'function' ? hasMoreMessagesUpdater(state.hasMoreMessages) : hasMoreMessagesUpdater
+  })),
 
   uploadProgress: {},
   setUploadProgress: (id, progress) => set((state) => ({

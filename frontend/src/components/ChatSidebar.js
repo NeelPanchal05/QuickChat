@@ -188,7 +188,20 @@ export default function ChatSidebar({
           </div>
         </div>
 
-        {memoizedConversations}
+        {conversations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-8 text-center mt-10 opacity-60">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+              <UserPlus size={32} className="text-muted-foreground" />
+            </div>
+            <p className="text-sm font-medium text-foreground mb-1">
+              {t("no_chats_yet")?.split('.')[0]}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t("no_chats_yet")?.split('.')[1]?.trim() || t("search_placeholder")}
+            </p>
+          </div>
+        ) : memoizedConversations}
+
       </div>
     </div>
   );

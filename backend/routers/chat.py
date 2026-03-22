@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Body, Request
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
 from database import db
@@ -41,6 +41,8 @@ async def create_conversation(request: Request, data: ConversationCreate, curren
 @router.get('/conversations')
 async def get_conversations(current_user: dict = Depends(get_current_user)):
     user_id = current_user['user_id']
+    # Threshold for "New" conversations (last 30 minutes)
+    new_threshold = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
     
     pipeline = [
         # Step 1: Filter conversations this user belongs to (not archived)
@@ -50,11 +52,7 @@ async def get_conversations(current_user: dict = Depends(get_current_user)):
                 'archived_by': {'$ne': user_id}
             }
         },
-        # Step 2: Sort newest first
-        { '$sort': { 'updated_at': -1 } },
-        { '$limit': 100 },
-
-        # Step 3: Join the last message in each conversation
+        # Step 2: Join the last message in each conversation
         {
             '$lookup': {
                 'from': 'messages',
@@ -68,12 +66,25 @@ async def get_conversations(current_user: dict = Depends(get_current_user)):
                 'as': 'last_message_arr'
             }
         },
-        # Step 4: Flatten last_message array → single object or null
+        # Step 3: Flatten last_message array → single object or null
         {
             '$addFields': {
                 'last_message': { '$arrayElemAt': ['$last_message_arr', 0] }
             }
         },
+        # Step 4: Privacy Filter - Only show if has messages, is pinned, OR is very new
+        {
+            '$match': {
+                '$or': [
+                    { 'last_message': { '$ne': None } },
+                    { 'pinned_by': user_id },
+                    { 'created_at': { '$gte': new_threshold } }
+                ]
+            }
+        },
+        # Step 5: Sort and limit
+        { '$sort': { 'updated_at': -1 } },
+        { '$limit': 100 },
         { '$unset': 'last_message_arr' },
         { '$project': { '_id': 0 } }
     ]

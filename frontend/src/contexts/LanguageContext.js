@@ -32,6 +32,7 @@ const translations = {
     view_location: "View Location",
     attached_file: "Attached File",
     poll: "Poll",
+    no_chats_yet: "No chats yet. Search for friends to start chatting!",
   },
   es: {
     settings: "Ajustes",
@@ -60,6 +61,7 @@ const translations = {
     view_location: "Ver Ubicación",
     attached_file: "Archivo Adjunto",
     poll: "Encuesta",
+    no_chats_yet: "Aún no hay chats. ¡Busca amigos para empezar a chatear!",
   },
   fr: {
     settings: "Paramètres",
@@ -88,6 +90,7 @@ const translations = {
     view_location: "Voir la position",
     attached_file: "Fichier Joint",
     poll: "Sondage",
+    no_chats_yet: "Pas encore de discussions. Recherchez des amis pour commencer !",
   },
   de: {
     settings: "Einstellungen",
@@ -116,6 +119,7 @@ const translations = {
     view_location: "Standort anzeigen",
     attached_file: "Angehängte Datei",
     poll: "Umfrage",
+    no_chats_yet: "Noch keine Chats. Suche nach Freunden, um zu chatten!",
   },
 };
 
