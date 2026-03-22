@@ -7,7 +7,7 @@ from database import db
 from models import UserRegister, OTPVerify, UserLogin, ChangePassword
 from utils import (
     generate_otp, hash_password, verify_password, 
-    create_access_token, create_refresh_token, send_email_func
+    create_access_token, create_refresh_token, send_email_func, GOOGLE_CLIENT_ID
 )
 from dependencies import get_current_user
 from rate_limiter import limiter, redis_client
@@ -161,9 +161,11 @@ async def google_auth(request: Request, response: Response):
         raise HTTPException(status_code=400, detail="Missing Google token")
         
     try:
-        # Verify Google token. No specific CLIENT_ID passed here so we accept any valid quickchat token, 
-        # but in production you should pass audience='YOUR_CLIENT_ID'
-        idinfo = id_token.verify_oauth2_token(token, requests.Request())
+        idinfo = id_token.verify_oauth2_token(
+            token,
+            requests.Request(),
+            audience=GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID else None
+        )
         email = idinfo.get('email')
         real_name = idinfo.get('name')
         profile_photo = idinfo.get('picture', '')
