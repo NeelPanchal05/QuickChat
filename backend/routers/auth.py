@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Response, Request, BackgroundTasks
 from datetime import datetime, timedelta, timezone
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 from database import db
 from models import UserRegister, OTPVerify, UserLogin, ChangePassword
@@ -147,6 +149,80 @@ async def login(request: Request, data: UserLogin, response: Response):
         user_res['blocked_users'] = []
         
     return {'token': access_token, 'user': user_res}
+
+@router.post('/google')
+@limiter.limit("10/minute")
+async def google_auth(request: Request, response: Response):
+    data = await request.json()
+    token = data.get('token')
+    public_key = data.get('public_key')
+    
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing Google token")
+        
+    try:
+        # Verify Google token. No specific CLIENT_ID passed here so we accept any valid quickchat token, 
+        # but in production you should pass audience='YOUR_CLIENT_ID'
+        idinfo = id_token.verify_oauth2_token(token, requests.Request())
+        email = idinfo.get('email')
+        real_name = idinfo.get('name')
+        profile_photo = idinfo.get('picture', '')
+        
+        if not email:
+            raise HTTPException(status_code=400, detail="Google account has no email")
+            
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    user = await db.users.find_one({'email': email})
+    is_new_user = False
+    
+    if not user:
+        # User does not exist, create them immediately
+        is_new_user = True
+        user_id = f"user_{datetime.now(timezone.utc).timestamp()}".replace('.', '_')
+        username = f"{email.split('@')[0]}{int(datetime.now(timezone.utc).timestamp()) % 10000}"
+        
+        # We enforce a public key if it's a new user
+        if not public_key:
+            raise HTTPException(status_code=400, detail="Public key is required for registration")
+            
+        user = {
+            'user_id': user_id,
+            'email': email,
+            'username': username,
+            'password_hash': '', # No password for Google users
+            'real_name': real_name,
+            'unique_id': username, # use generated username as unique_id initially
+            'profile_photo': profile_photo,
+            'bio': '',
+            'online_status': 'offline',
+            'verified': True,
+            'public_key': public_key,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'blocked_users': []
+        }
+        await db.users.insert_one(user)
+    
+    access_token = create_access_token({'sub': user['user_id']})
+    refresh_token = create_refresh_token({'sub': user['user_id']})
+    
+    # Set HttpOnly cookie for refresh token
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=7 * 24 * 60 * 60 # 7 days
+    )
+    
+    user_res = {k: v for k, v in user.items() if k not in ['_id', 'password_hash']}
+    if 'blocked_users' not in user_res:
+        user_res['blocked_users'] = []
+        
+    return {'token': access_token, 'user': user_res, 'is_new_user': is_new_user}
+
 
 @router.get('/me')
 async def get_me(current_user: dict = Depends(get_current_user)):

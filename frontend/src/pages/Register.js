@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, MessageCircle, Sparkles, User, AtSign, Mail, Hash, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useRef } from "react";
+import { GoogleLogin } from "@react-oauth/google";
 
 const fields = [
   { name: "real_name",  label: "Full Name",  icon: User,   type: "text",     placeholder: "Your full name",              testId: "real-name-input" },
@@ -17,7 +18,7 @@ const fields = [
 
 function RegisterForm({ containerRef }) {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, googleAuth } = useAuth();
   const [formData, setFormData] = useState({ email: "", username: "", password: "", real_name: "", unique_id: "" });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -35,6 +36,19 @@ function RegisterForm({ containerRef }) {
       navigate("/verify-otp", { state: { email: formData.email } });
     } catch (error) {
       toast.error(error.message || "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setLoading(true);
+    try {
+      await googleAuth(credentialResponse.credential);
+      toast.success("Google Sign Up successful!");
+      navigate("/chat");
+    } catch (error) {
+      toast.error(error.message || "Google Sign Up failed");
     } finally {
       setLoading(false);
     }
@@ -110,6 +124,23 @@ function RegisterForm({ containerRef }) {
             </span>
           ) : "Create Account"}
         </button>
+
+        <div className="relative flex items-center py-2">
+          <div className="flex-grow border-t border-border"></div>
+          <span className="flex-shrink-0 mx-4 text-xs text-muted-foreground uppercase">Or</span>
+          <div className="flex-grow border-t border-border"></div>
+        </div>
+
+        <div className="flex justify-center w-full pb-2">
+           <GoogleLogin
+             onSuccess={handleGoogleSuccess}
+             onError={() => toast.error("Google Sign Up Failed")}
+             theme="filled_black"
+             shape="rectangular"
+             text="signup_with"
+             width="100%"
+           />
+        </div>
       </div>
     </form>
   );
@@ -122,28 +153,12 @@ export default function Register() {
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t); }, []);
 
-  const memoizedBackground = useMemo(() => (
-    <>
-      {/* Overlay */}
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(7,7,15,0.9) 0%, rgba(30,0,60,0.78) 100%)', backdropFilter: 'blur(4px)' }} />
 
-      {/* Orbs */}
-      <div className="absolute top-1/3 left-1/5 w-72 h-72 rounded-full pointer-events-none animate-orb-float"
-        style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)', filter: 'blur(50px)', willChange: 'transform' }} />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 70%)', filter: 'blur(60px)', animation: 'orbFloat 12s ease-in-out infinite reverse', willChange: 'transform' }} />
-    </>
-  ), []);
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden"
-      style={{
-        backgroundImage: "url(https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85)",
-        backgroundSize: "cover", backgroundPosition: "center",
-      }}
+      className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden bg-black"
     >
-      {memoizedBackground}
 
       <div
         ref={containerRef}

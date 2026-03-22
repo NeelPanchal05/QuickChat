@@ -7,6 +7,9 @@ import { SoundProvider } from "./contexts/SoundContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { ChatProvider } from "./contexts/ChatContext";
 import { DialogProvider } from "./contexts/DialogContext";
+import { GoogleOAuthProvider } from "@react-oauth/google";
+
+const googleClientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || "342221907825-atmg7mjjqq27kqb3pqb6bukslg7udajf.apps.googleusercontent.com";
 
 // --- OPTIMIZATION: Lazy Load Pages ---
 const Login = lazy(() => import("./pages/Login"));
@@ -57,7 +60,8 @@ const ProtectedRoute = ({ children }) => {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <GoogleOAuthProvider clientId={googleClientId}>
+      <BrowserRouter>
       <AuthProvider>
         <ThemeProvider>
           <SoundProvider>
@@ -99,5 +103,6 @@ export default function App() {
       </ThemeProvider>
     </AuthProvider>
   </BrowserRouter>
+  </GoogleOAuthProvider>
   );
 }

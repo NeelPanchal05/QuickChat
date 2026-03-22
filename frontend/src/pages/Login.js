@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff, MessageCircle, Sparkles } from "lucide-react";
+import { MessageCircle, Sparkles, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { GoogleLogin } from "@react-oauth/google";
 
 function LoginForm({ containerRef }) {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, googleAuth } = useAuth();
   const [loginData, setLoginData] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,6 +24,19 @@ function LoginForm({ containerRef }) {
       navigate("/chat");
     } catch (error) {
       toast.error(error.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setLoading(true);
+    try {
+      await googleAuth(credentialResponse.credential);
+      toast.success("Google Login successful!");
+      navigate("/chat");
+    } catch (error) {
+      toast.error(error.message || "Google Login failed");
     } finally {
       setLoading(false);
     }
@@ -97,6 +111,23 @@ function LoginForm({ containerRef }) {
             </span>
           ) : "Sign In"}
         </button>
+
+        <div className="relative flex items-center py-2">
+          <div className="flex-grow border-t border-border"></div>
+          <span className="flex-shrink-0 mx-4 text-xs text-muted-foreground uppercase">Or</span>
+          <div className="flex-grow border-t border-border"></div>
+        </div>
+
+        <div className="flex justify-center w-full pb-2">
+           <GoogleLogin
+             onSuccess={handleGoogleSuccess}
+             onError={() => toast.error("Google Login Failed")}
+             theme="filled_black"
+             shape="rectangular"
+             text="continue_with"
+             width="100%"
+           />
+        </div>
       </div>
     </form>
   );
@@ -112,30 +143,12 @@ export default function Login() {
     return () => clearTimeout(t);
   }, []);
 
-  const memoizedBackground = useMemo(() => (
-    <>
-      {/* Animated overlay */}
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(7,7,15,0.88) 0%, rgba(30,0,60,0.75) 100%)', backdropFilter: 'blur(4px)' }} />
 
-      {/* Floating orbs */}
-      <div className="absolute top-1/4 left-1/4 w-72 h-72 rounded-full pointer-events-none animate-orb-float"
-        style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 70%)', filter: 'blur(40px)', willChange: 'transform' }} />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(79,70,229,0.12) 0%, transparent 70%)', filter: 'blur(60px)', animation: 'orbFloat 11s ease-in-out infinite reverse', willChange: 'transform' }} />
-    </>
-  ), []);
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden"
-      style={{
-        backgroundImage:
-          "url(https://images.unsplash.com/photo-1760978631939-32968f2e1813?crop=entropy&cs=srgb&fm=jpg&q=85)",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
+      className="min-h-screen flex items-center justify-center p-3 sm:p-4 overflow-hidden bg-black"
     >
-      {memoizedBackground}
 
       {/* Card */}
       <div

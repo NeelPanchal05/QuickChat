@@ -181,6 +181,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const googleAuth = async (googleToken) => {
+    const keyPair = generateKeyPair();
+    
+    try {
+      const res = await api.post('/auth/google', {
+        token: googleToken,
+        public_key: keyPair.publicKey
+      });
+      const data = res.data;
+
+      localStorage.setItem("token", data.token);
+      setToken(data.token);
+
+      if (data.is_new_user && data.user?.email) {
+        localStorage.setItem(`e2ee_private_key_${data.user.email}`, keyPair.privateKey);
+      }
+
+      if (data.user) {
+        setUser(data.user);
+        setCachedUser(data.user);
+        setLoading(false);
+      } else {
+        await fetchUser(data.token);
+      }
+      return data;
+    } catch (err) {
+      throw new Error(err.response?.data?.detail || "Google authentication failed.");
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -190,6 +220,7 @@ export const AuthProvider = ({ children }) => {
         login,
         register,
         verifyOtp,
+        googleAuth,
         logout,
         loading,
         socket,
