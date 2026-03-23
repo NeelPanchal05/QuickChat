@@ -26,8 +26,8 @@ SENDER_EMAIL = os.getenv('SENDER_EMAIL', GMAIL_EMAIL)
 
 VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
 VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
-VAPID_CLAIMS_EMAIL = os.getenv('VAPID_CLAIMS_EMAIL', 'mailto:' + SENDER_EMAIL)
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+VAPID_CLAIMS_EMAIL = os.getenv('VAPID_CLAIMS_EMAIL', 'mailto:' + SENDER_EMAIL).strip('"').strip("'")
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '').strip('"').strip("'")
 
 logger = logging.getLogger(__name__)
 

@@ -127,7 +127,13 @@ async def verify_otp(request: Request, data: OTPVerify, response: Response):
 @router.post('/login')
 @limiter.limit("10/minute")
 async def login(request: Request, data: UserLogin, response: Response):
-    user = await db.users.find_one({'$or': [{'email': data.login}, {'username': data.login}]})
+    # Case-insensitive lookup for email, exact match for username
+    user = await db.users.find_one({
+        '$or': [
+            {'email': {'$regex': f'^{data.login}$', '$options': 'i'}}, 
+            {'username': data.login}
+        ]
+    })
     if not user or not verify_password(data.password, user['password_hash']):
         raise HTTPException(status_code=401, detail='Invalid credentials')
     
@@ -164,7 +170,8 @@ async def google_auth(request: Request, response: Response):
         idinfo = id_token.verify_oauth2_token(
             token,
             requests.Request(),
-            audience=GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID else None
+            audience=GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID else None,
+            clock_skew_in_seconds=60
         )
         email = idinfo.get('email')
         real_name = idinfo.get('name')
@@ -173,10 +180,13 @@ async def google_auth(request: Request, response: Response):
         if not email:
             raise HTTPException(status_code=400, detail="Google account has no email")
             
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid Google token")
+    except ValueError as e:
+        print(f"Google Auth Error: {e}")
+        raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
 
-    user = await db.users.find_one({'email': email})
+    # Make case-insensitive query for email
+    email_regex = {'$regex': f"^{email}$", '$options': 'i'}
+    user = await db.users.find_one({'email': email_regex})
     is_new_user = False
     
     if not user:
