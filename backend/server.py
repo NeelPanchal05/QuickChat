@@ -63,4 +63,9 @@ app.include_router(chat.router)
 app.include_router(push.router)
 app.include_router(ai.router)
 
+@app.get("/")
+@app.head("/")
+async def root():
+    return {"status": "ok", "service": "QuickChat API"}
+
 app_asgi = socketio.ASGIApp(sio, app)
