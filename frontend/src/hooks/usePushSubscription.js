@@ -51,6 +51,8 @@ export function usePushSubscription() {
     };
     
     // Automatically prompt when Chat page loads.
+    if (!('Notification' in window)) return;
+    
     if (Notification.permission === 'granted') {
       subscribe();
     } else if (Notification.permission !== 'denied') {
